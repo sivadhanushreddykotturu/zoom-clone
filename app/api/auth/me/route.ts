@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
+import { isMeetingCreationAllowed } from '@/lib/auth-domains'
 
 export async function GET() {
   const session = await getSession()
@@ -9,6 +10,9 @@ export async function GET() {
 
   return NextResponse.json({
     authenticated: true,
-    user: session
+    user: {
+      ...session,
+      canCreateMeeting: isMeetingCreationAllowed(session.email),
+    }
   })
 }

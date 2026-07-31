@@ -134,21 +134,29 @@ export default function DashboardPage() {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-850 px-3 py-1 text-xs font-medium text-white">
                 <ShieldCheck className="size-3.5" />
-                <span>Domain Restricted</span>
+                <span>{user?.canCreateMeeting === false ? 'Authorized Hosts Only' : 'Domain Restricted'}</span>
               </div>
               <h2 className="text-2xl font-bold text-white">Host Secure Meeting</h2>
               <p className="text-sm text-zinc-400">
-                Specify allowed email domains (e.g. @kluniversity.in) and assign moderators.
+                {user?.canCreateMeeting === false
+                  ? 'Meeting creation is restricted to authorized host accounts to conserve LiveKit credits. You can join existing meetings below.'
+                  : 'Specify allowed email domains (e.g. @kluniversity.in) and assign moderators.'}
               </p>
             </div>
 
-            <Link
-              href="/create-meeting"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-black hover:bg-zinc-200 transition"
-            >
-              <Plus className="size-5" />
-              <span>Create New Meeting</span>
-            </Link>
+            {user?.canCreateMeeting === false ? (
+              <div className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-6 py-3.5 text-xs font-medium text-zinc-500 cursor-not-allowed">
+                <span>Creation Restricted to Admin</span>
+              </div>
+            ) : (
+              <Link
+                href="/create-meeting"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-black hover:bg-zinc-200 transition"
+              >
+                <Plus className="size-5" />
+                <span>Create New Meeting</span>
+              </Link>
+            )}
           </div>
 
           {/* Join Meeting Card */}

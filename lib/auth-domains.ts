@@ -13,6 +13,20 @@ export const ALLOWED_REGISTRATION_DOMAINS: string[] = [
 ]
 
 /**
+ * Central Configuration for Authorized Meeting Creators (Hosts).
+ * 
+ * To restrict meeting creation to specific emails (to conserve LiveKit credits),
+ * add authorized host email addresses to the ALLOWED_MEETING_CREATORS array below.
+ * 
+ * If this array is empty or contains '*', anyone can create meetings.
+ */
+export const ALLOWED_MEETING_CREATORS: string[] = [
+  'sivadhanushkotturu@gmail.com',
+  // Add additional authorized host emails here in the future:
+  // '2400032717@kluniversity.in',
+]
+
+/**
  * Validates if a user's email domain is allowed to register/log in.
  */
 export function isEmailDomainAllowed(email: string): boolean {
@@ -27,5 +41,22 @@ export function isEmailDomainAllowed(email: string): boolean {
     if (cleanDomain === '*') return true
     const normalizedDomain = cleanDomain.startsWith('@') ? cleanDomain : `@${cleanDomain}`
     return cleanEmail.endsWith(normalizedDomain)
+  })
+}
+
+/**
+ * Validates if a user's email is authorized to create/host new meetings.
+ */
+export function isMeetingCreationAllowed(email: string): boolean {
+  if (!ALLOWED_MEETING_CREATORS || ALLOWED_MEETING_CREATORS.length === 0) {
+    return true
+  }
+
+  const cleanEmail = email.trim().toLowerCase()
+
+  return ALLOWED_MEETING_CREATORS.some((creator) => {
+    const cleanCreator = creator.trim().toLowerCase()
+    if (cleanCreator === '*') return true
+    return cleanEmail === cleanCreator
   })
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { connectDB } from '@/lib/db/connect'
 import { Meeting } from '@/lib/db/models/Meeting'
 import { getSession } from '@/lib/auth'
+import { isMeetingCreationAllowed } from '@/lib/auth-domains'
 
 function parseList(input: any): string[] {
   if (!input) return []
@@ -29,6 +30,13 @@ export async function POST(req: Request) {
     const session = await getSession()
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized. Please log in.' }, { status: 401 })
+    }
+
+    if (!isMeetingCreationAllowed(session.email)) {
+      return NextResponse.json(
+        { error: 'Only authorized hosts are allowed to create new meetings.' },
+        { status: 403 }
+      )
     }
 
     const { title, allowedDomains, allowedEmails, moderators } = await req.json()
