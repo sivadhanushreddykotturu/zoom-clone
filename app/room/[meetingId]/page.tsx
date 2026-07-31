@@ -505,7 +505,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           if (res.status === 403) {
             setAccessDenied({ allowedDomains: data.allowedDomains || [] })
           }
-          setError(data.error || 'Could not join meeting.')
+          const errorMsg = typeof data.error === 'string' ? data.error : (data.error?.message || String(data.error || 'Could not join meeting.'));
+          setError(errorMsg)
           setLoading(false)
           return
         }
@@ -638,7 +639,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       } catch (err: any) {
         if (!cancelled) {
           console.error('Room connection error:', err)
-          setError(err.message || 'Failed to connect to meeting.')
+          const errorMsg = err instanceof Error ? err.message : String(err || 'Failed to connect to meeting.');
+          setError(errorMsg)
           setLoading(false)
         }
       }
@@ -1100,7 +1102,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           </div>
           <div>
             <h2 className="text-xl font-bold text-white">Access Denied</h2>
-            <p className="mt-2 text-sm text-zinc-450">{error || 'Access error.'}</p>
+            <p className="mt-2 text-sm text-zinc-450">
+              {typeof error === 'string' ? error : (error as any)?.message || 'Access error.'}
+            </p>
           </div>
           <Link
             href="/dashboard"
