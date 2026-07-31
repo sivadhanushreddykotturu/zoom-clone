@@ -516,7 +516,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       cancelled = true
       roomRef.current?.disconnect()
     }
-  }, [meetingId, router, showToast])
+  }, [meetingId, router, showToast, lobbyStatus])
 
   const self = participants.find((p) => p.isSelf)
   const isMuted = self?.isMuted ?? true
