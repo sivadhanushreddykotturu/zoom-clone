@@ -58,6 +58,72 @@ function toUiParticipant(
   }
 }
 
+function ScreenshareVideo({ room, participantIdentity }: { room: Room | null; participantIdentity: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const videoElement = videoRef.current
+    if (!room || !videoElement) return
+
+    const targetParticipant = participantIdentity === room.localParticipant.identity
+      ? room.localParticipant
+      : room.remoteParticipants.get(participantIdentity)
+
+    if (!targetParticipant) return
+
+    let attachedTrack: any = null
+
+    const attachTrack = () => {
+      const publications = targetParticipant.trackPublications || (targetParticipant as any).tracks
+      if (!publications) return
+
+      for (const pub of publications.values()) {
+        if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+          if (pub.track) {
+            if (attachedTrack !== pub.track) {
+              if (attachedTrack) attachedTrack.detach(videoElement)
+              pub.track.attach(videoElement)
+              attachedTrack = pub.track
+            }
+          } else {
+            // Track is not yet subscribed, wait for it
+            pub.on('subscribed', (track: any) => {
+              if (attachedTrack) attachedTrack.detach(videoElement)
+              track.attach(videoElement)
+              attachedTrack = track
+            })
+          }
+          break
+        }
+      }
+    }
+
+    attachTrack()
+
+    const handleTrackSubscribed = () => {
+      attachTrack()
+    }
+    
+    targetParticipant.on('trackSubscribed', handleTrackSubscribed)
+
+    return () => {
+      targetParticipant.off('trackSubscribed', handleTrackSubscribed)
+      if (attachedTrack && videoElement) {
+        attachedTrack.detach(videoElement)
+      }
+    }
+  }, [room, participantIdentity])
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      className="w-full h-full object-contain"
+    />
+  )
+}
+
 export default function RoomPage({ params }: { params: Promise<{ meetingId: string }> }) {
   const { meetingId } = use(params)
   const router = useRouter()
@@ -902,6 +968,16 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
               </button>
             )}
           </div>
+
+          {/* Active Screenshare Video Render Frame */}
+          {currentScreenSharer && (
+            <div className="mb-8 w-full aspect-video rounded-xl bg-black border border-zinc-800 overflow-hidden relative flex flex-col justify-end shadow-xl">
+              <ScreenshareVideo room={roomRef.current} participantIdentity={currentScreenSharer} />
+              <div className="absolute bottom-4 left-4 bg-black border border-zinc-800 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-300 shadow-md font-mono">
+                {currentScreenSharer === selfIdentity ? "Your Screen" : `${participants.find(p => p.id === currentScreenSharer)?.name || currentScreenSharer}'s Screen`}
+              </div>
+            </div>
+          )}
 
           <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
             {participantsWithReactions.map((participant) => (
