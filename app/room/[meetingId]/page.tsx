@@ -170,7 +170,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
   // Host unmute request popup state
   const [showUnmuteRequest, setShowUnmuteRequest] = useState(false)
-  const [isMuteLocked, setIsMuteLocked] = useState(false)
+  const [isMuteLocked, setIsMuteLocked] = useState(true) // Locked by default for non-admins on entry
 
   // End Meeting Alert Confirmation Dialog
   const [showEndMeetingPrompt, setShowEndMeetingPrompt] = useState(false)
@@ -554,8 +554,11 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   )
 
   const toggleMute = useCallback(async () => {
-    if (isMuteLocked) {
-      showToast('Muted by host. You can only unmute when requested.')
+    const isMod = moderatorsRef.current.some(
+      (m) => m.toLowerCase() === selfIdentityRef.current.toLowerCase()
+    )
+    if (isMuteLocked && !isMod) {
+      showToast('You must be requested by the host to unmute.')
       return
     }
     const room = roomRef.current
