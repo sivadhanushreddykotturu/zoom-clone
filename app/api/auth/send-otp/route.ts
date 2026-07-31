@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { connectDB } from '@/lib/db/connect'
 import { Otp } from '@/lib/db/models/Otp'
 import { sendOtpEmail } from '@/lib/brevo'
+import { isEmailDomainAllowed, ALLOWED_REGISTRATION_DOMAINS } from '@/lib/auth-domains'
 
 export async function POST(req: Request) {
   try {
@@ -12,6 +13,14 @@ export async function POST(req: Request) {
     }
 
     const cleanEmail = email.trim().toLowerCase()
+
+    if (!isEmailDomainAllowed(cleanEmail)) {
+      const allowedList = ALLOWED_REGISTRATION_DOMAINS.join(', ')
+      return NextResponse.json(
+        { error: `Registration is restricted. Email domain must end with ${allowedList}` },
+        { status: 403 }
+      )
+    }
 
     await connectDB()
 

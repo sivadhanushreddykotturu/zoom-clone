@@ -137,7 +137,7 @@ export default function DashboardPage() {
               </div>
               <h2 className="text-2xl font-bold text-white">Host Secure Meeting</h2>
               <p className="text-sm text-zinc-400">
-                Specify allowed email domains (e.g. @gmail.com, @kluniversity.com) and assign moderators.
+                Specify allowed email domains (e.g. @kluniversity.in) and assign moderators.
               </p>
             </div>
 

@@ -116,14 +116,14 @@ export default function LoginPage() {
                 <input
                   type="email"
                   required
-                  placeholder="name@organization.com"
+                  placeholder="2400032717@kluniversity.in"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full rounded-xl border border-zinc-800 bg-black py-3 pl-11 pr-4 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-white focus:ring-1 focus:ring-white"
                 />
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                Support domains like @kluniversity.com, @gmail.com, etc.
+                Only email addresses ending with <span className="text-zinc-300 font-mono">@kluniversity.in</span> are accepted.
               </p>
             </div>
 

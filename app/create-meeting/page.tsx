@@ -8,7 +8,7 @@ import { ArrowLeft, Video, ShieldAlert, Users, Globe, Plus, Copy, Check } from '
 export default function CreateMeetingPage() {
   const router = useRouter()
   const [title, setTitle] = useState('')
-  const [allowedDomains, setAllowedDomains] = useState('@gmail.com, @kluniversity.com')
+  const [allowedDomains, setAllowedDomains] = useState('@kluniversity.in')
   const [allowedEmails, setAllowedEmails] = useState('')
   const [moderators, setModerators] = useState('')
   const [loading, setLoading] = useState(false)
@@ -157,7 +157,7 @@ export default function CreateMeetingPage() {
                 </div>
                 <input
                   type="text"
-                  placeholder="@gmail.com, @kluniversity.com"
+                  placeholder="@kluniversity.in"
                   value={allowedDomains}
                   onChange={(e) => setAllowedDomains(e.target.value)}
                   className="w-full rounded-xl border border-zinc-800 bg-black py-3 px-4 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-white"
