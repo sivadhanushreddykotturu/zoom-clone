@@ -37,17 +37,20 @@ function toUiParticipant(
 
   let isMuted = true
   let isSpeaking = p.isSpeaking ?? false
-  for (const pub of p.trackPublications.values()) {
-    if (pub.kind === Track.Kind.Audio) {
-      isMuted = pub.isMuted ?? true
-      break
+  const publications = p.trackPublications || p.tracks
+  if (publications) {
+    for (const pub of publications.values()) {
+      if (pub.kind === Track.Kind.Audio) {
+        isMuted = pub.isMuted ?? true
+        break
+      }
     }
   }
 
   return {
     id: p.identity,
     name: p.name || p.identity,
-    avatar: '',
+    avatar: '', // generated dynamically via Dicebear
     isAdmin,
     isSpeaking,
     isMuted,
@@ -148,11 +151,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
     // Detect if someone is screensharing in the room
     let activeSharer: string | null = null
-    for (const p of room.participants.values()) {
-      for (const pub of p.trackPublications.values()) {
-        if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
-          activeSharer = p.identity
-          break
+    const allParticipants = [room.localParticipant, ...Array.from(room.remoteParticipants.values())].filter(Boolean)
+    for (const p of allParticipants) {
+      const publications = p.trackPublications || p.tracks
+      if (publications) {
+        for (const pub of publications.values()) {
+          if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+            activeSharer = p.identity
+            break
+          }
         }
       }
     }
