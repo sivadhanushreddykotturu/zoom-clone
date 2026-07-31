@@ -27,6 +27,20 @@ export async function POST(req: Request) {
     const isHost = meeting.hostEmail === userEmail
     const isModerator = isHost || meeting.moderators.includes(userEmail)
 
+    // Enforce lobby waiting room check for regular participants
+    if (!isHost && !isModerator) {
+      const lobbyEntry = meeting.lobby.find((p) => p.email === userEmail)
+      if (!lobbyEntry || lobbyEntry.status !== 'approved') {
+        return NextResponse.json(
+          {
+            error: 'Lobby Approval Required: You must be let in by the host/moderators to join this meeting.',
+            lobbyRequired: true,
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     // Access control check
     const hasAllowedEmails = meeting.allowedEmails && meeting.allowedEmails.length > 0
     const hasAllowedDomains = meeting.allowedDomains && meeting.allowedDomains.length > 0

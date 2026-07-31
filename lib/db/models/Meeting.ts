@@ -1,5 +1,12 @@
 import mongoose, { Schema, Document, Model } from 'mongoose'
 
+export interface ILobbyParticipant {
+  email: string
+  name: string
+  status: 'pending' | 'approved' | 'denied'
+  requestedAt: Date
+}
+
 export interface IMeeting extends Document {
   meetingId: string
   title: string
@@ -7,6 +14,7 @@ export interface IMeeting extends Document {
   moderators: string[]
   allowedDomains: string[]
   allowedEmails: string[]
+  lobby: ILobbyParticipant[]
   createdAt: Date
 }
 
@@ -17,6 +25,14 @@ const MeetingSchema = new Schema<IMeeting>({
   moderators: [{ type: String, lowercase: true, trim: true }],
   allowedDomains: [{ type: String, lowercase: true, trim: true }],
   allowedEmails: [{ type: String, lowercase: true, trim: true }],
+  lobby: [
+    {
+      email: { type: String, lowercase: true, trim: true },
+      name: { type: String },
+      status: { type: String, enum: ['pending', 'approved', 'denied'], default: 'pending' },
+      requestedAt: { type: Date, default: Date.now },
+    },
+  ],
   createdAt: { type: Date, default: Date.now }
 })
 

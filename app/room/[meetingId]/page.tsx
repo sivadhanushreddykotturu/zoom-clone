@@ -15,7 +15,7 @@ import { RoomHeader } from '@/components/room-header'
 import { ParticipantTile } from '@/components/participant-tile'
 import { ControlBar } from '@/components/control-bar'
 import type { Participant as UiParticipant } from '@/lib/room-data'
-import { Lock, MailCheck, ArrowLeft, Send, X, Shield, VolumeX, Mic } from 'lucide-react'
+import { Lock, MailCheck, ArrowLeft, Send, X, Shield, VolumeX, Mic, Monitor, UserCheck, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 
 interface ChatMessage {
@@ -48,7 +48,7 @@ function toUiParticipant(
   return {
     id: p.identity,
     name: p.name || p.identity,
-    avatar: '', // generated dynamically in ParticipantTile via Dicebear Adventurer
+    avatar: '', // generated dynamically via Dicebear
     isAdmin,
     isSpeaking,
     isMuted,
@@ -60,7 +60,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   const { meetingId } = use(params)
   const router = useRouter()
 
+  // Room states
   const [loading, setLoading] = useState(true)
+  const [lobbyStatus, setLobbyStatus] = useState<'approved' | 'pending' | 'denied' | 'none'>('none')
+  const [lobbyList, setLobbyList] = useState<any[]>([]) // Hosts track pending requests here
   const [error, setError] = useState<string | null>(null)
   const [accessDenied, setAccessDenied] = useState<{ allowedDomains: string[] } | null>(null)
   const [connected, setConnected] = useState(false)
@@ -70,11 +73,29 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   const [moderators, setModerators] = useState<string[]>([])
   const [participants, setParticipants] = useState<UiParticipant[]>([])
   
-  // Real-time Chat state
+  // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+
+  // Reactions state
+  const [reactions, setReactions] = useState<{ [identity: string]: string }>({})
+
+  // Host/Co-host waiting room side drawer
+  const [isLobbyOpen, setIsLobbyOpen] = useState(false)
+
+  // Screensharing state
+  const [isScreenSharing, setIsScreenSharing] = useState(false)
+  const [currentScreenSharer, setCurrentScreenSharer] = useState<string | null>(null)
+  const [screenshareRequest, setScreenshareRequest] = useState<{ identity: string; name: string } | null>(null)
+  const [screenshareCooldown, setScreenshareCooldown] = useState(false)
+
+  // Host unmute request popup state
+  const [showUnmuteRequest, setShowUnmuteRequest] = useState(false)
+
+  const [toast, setToast] = useState<string | null>(null)
+  const roomRef = useRef<Room | null>(null)
 
   const isChatOpenRef = useRef(isChatOpen)
   useEffect(() => {
@@ -83,15 +104,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       setUnreadCount(0)
     }
   }, [isChatOpen])
-
-  // Reactions state
-  const [reactions, setReactions] = useState<{ [identity: string]: string }>({})
-
-  // Host unmute request popup state
-  const [showUnmuteRequest, setShowUnmuteRequest] = useState(false)
-
-  const [toast, setToast] = useState<string | null>(null)
-  const roomRef = useRef<Room | null>(null)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -103,7 +115,57 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     return () => clearTimeout(t)
   }, [toast])
 
-  // Build UI participants
+  // 1. Lobby Waiting Room Polling Flow
+  useEffect(() => {
+    if (lobbyStatus !== 'pending') return
+
+    const checkLobby = async () => {
+      try {
+        const res = await fetch(`/api/meetings/${meetingId}/lobby`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.status === 'approved') {
+            setLobbyStatus('approved')
+            setLoading(true) // restart connection flow
+          } else if (data.status === 'denied') {
+            setLobbyStatus('denied')
+            setError('The host declined your request to join this meeting.')
+          }
+        }
+      } catch (err) {
+        console.error('Error polling waiting room status:', err)
+      }
+    }
+
+    const interval = setInterval(checkLobby, 4000)
+    return () => clearInterval(interval)
+  }, [lobbyStatus, meetingId])
+
+  // 2. Host Pending Lobby List Polling Flow
+  const fetchLobbyList = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}/lobby`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.isModerator && data.pending) {
+          setLobbyList(data.pending)
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching lobby queue list:', err)
+    }
+  }, [meetingId])
+
+  useEffect(() => {
+    const isMod = moderators.includes(selfIdentity)
+    if (!connected || !isMod) return
+
+    fetchLobbyList()
+    const interval = setInterval(fetchLobbyList, 5000)
+    return () => clearInterval(interval)
+  }, [connected, moderators, selfIdentity, fetchLobbyList])
+
+  // Build UI participants list
   const rebuildParticipants = useCallback(
     (room: Room, identity: string, mods: string[]) => {
       const all: UiParticipant[] = []
@@ -114,11 +176,23 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         all.push(toUiParticipant(p, identity, mods))
       }
       setParticipants(all)
+
+      // Also detect if someone is screensharing in the room
+      let activeSharer: string | null = null
+      for (const p of room.participants.values()) {
+        for (const pub of p.trackPublications.values()) {
+          if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+            activeSharer = p.identity
+            break
+          }
+        }
+      }
+      setCurrentScreenSharer(activeSharer)
     },
     [],
   )
 
-  // Handle incoming LiveKit data channel messages (Chat, Reactions, Moderator Unmute Requests, Co-host promos)
+  // Handle incoming LiveKit data channel messages
   const handleDataReceived = useCallback(
     (payload: Uint8Array, participant?: RemoteParticipant, kind?: any) => {
       const textDecoder = new TextDecoder()
@@ -143,7 +217,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           }
         } else if (message.type === 'reaction') {
           setReactions((prev) => ({ ...prev, [senderId]: message.emoji }))
-          // Clear reaction after 3 seconds
           setTimeout(() => {
             setReactions((prev) => {
               const next = { ...prev }
@@ -156,32 +229,66 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             setShowUnmuteRequest(true)
           }
         } else if (message.type === 'cohost-promoted') {
-          // Add identity to moderators list dynamically
           setModerators((prev) => {
             const next = [...prev]
             if (!next.includes(message.identity)) {
               next.push(message.identity)
             }
-            // Trigger rebuild of participants list
             if (roomRef.current) {
               rebuildParticipants(roomRef.current, selfIdentity, next)
             }
             return next
           })
           showToast(`${message.identityName} has been promoted to Co-host.`)
+        } else if (message.type === 'screenshare-request') {
+          // Only show popup to Host / Co-host (or the current screensharer if active)
+          const isMod = moderators.includes(selfIdentity)
+          const isCurrentSharer = currentScreenSharer === selfIdentity
+          if (isMod || isCurrentSharer) {
+            setScreenshareRequest({ identity: senderId, name: senderName })
+          }
+        } else if (message.type === 'screenshare-approved') {
+          if (message.target === selfIdentity) {
+            showToast('Screenshare request approved! Starting share.')
+            startScreenSharingLocally()
+          }
+        } else if (message.type === 'screenshare-denied') {
+          if (message.target === selfIdentity) {
+            showToast('Host declined your screenshare request.')
+          }
+        } else if (message.type === 'stop-screenshare-signal') {
+          if (isScreenSharing && roomRef.current) {
+            roomRef.current.localParticipant.setScreenShareEnabled(false)
+            setIsScreenSharing(false)
+            showToast('Host stopped your screenshare.')
+          }
         }
       } catch (e) {
         console.error('Error parsing data channel message:', e)
       }
     },
-    [selfIdentity, rebuildParticipants, showToast],
+    [selfIdentity, rebuildParticipants, showToast, moderators, currentScreenSharer, isScreenSharing],
   )
 
+  // Start connect flow
   useEffect(() => {
+    if (lobbyStatus === 'pending' || lobbyStatus === 'denied') return
     let cancelled = false
 
     async function connect() {
       try {
+        // Try lobby registration first
+        const lobbyCheck = await fetch(`/api/meetings/${meetingId}/lobby`, {
+          method: 'POST',
+        })
+        const lobbyData = await lobbyCheck.json()
+        if (lobbyData.status === 'pending') {
+          setLobbyStatus('pending')
+          setLoading(false)
+          return
+        }
+
+        // Fetch LiveKit Token
         const res = await fetch('/api/livekit/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -192,6 +299,11 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         if (!res.ok) {
           if (res.status === 401) {
             router.push(`/login?redirect=/room/${meetingId}`)
+            return
+          }
+          if (res.status === 403 && data.lobbyRequired) {
+            setLobbyStatus('pending')
+            setLoading(false)
             return
           }
           if (res.status === 403) {
@@ -210,6 +322,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         setSelfIdentity(identity)
         setSelfName(name)
         setModerators(mods)
+        setLobbyStatus('approved')
 
         const livekitRoom = new Room()
         roomRef.current = livekitRoom
@@ -232,6 +345,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           .on(RoomEvent.ActiveSpeakersChanged, refresh)
           .on(RoomEvent.LocalTrackPublished, refresh)
           .on(RoomEvent.LocalTrackUnpublished, refresh)
+          .on(RoomEvent.TrackSubscribed, refresh)
+          .on(RoomEvent.TrackUnsubscribed, refresh)
           .on(RoomEvent.DataReceived, handleDataReceived)
           .on(RoomEvent.Disconnected, () => {
             if (!cancelled) {
@@ -269,7 +384,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       cancelled = true
       roomRef.current?.disconnect()
     }
-  }, [meetingId, router, rebuildParticipants, showToast, handleDataReceived])
+  }, [meetingId, router, rebuildParticipants, showToast, handleDataReceived, lobbyStatus])
 
   const self = participants.find((p) => p.isSelf)
   const isMuted = self?.isMuted ?? true
@@ -297,6 +412,26 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     router.push('/dashboard')
   }, [router])
 
+  // Moderate Waiting Room (Allow / Discard)
+  const handleLobbyAction = useCallback(async (targetEmail: string, action: 'approve' | 'deny') => {
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}/lobby`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetEmail, action }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error)
+      }
+      showToast(`${targetEmail} ${action === 'approve' ? 'allowed entry' : 'entry request discarded'}.`)
+      fetchLobbyList()
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update lobby status.')
+    }
+  }, [meetingId, fetchLobbyList, showToast])
+
+  // Remote mute-all
   const handleMuteEveryone = useCallback(async () => {
     try {
       const res = await fetch('/api/livekit/admin-action', {
@@ -312,6 +447,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }, [meetingId, showToast])
 
+  // Remote Kick
   const handleKickParticipant = useCallback(async () => {
     const nonAdmins = participants.filter((p) => !p.isSelf && !p.isAdmin)
     if (nonAdmins.length === 0) {
@@ -333,7 +469,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }, [meetingId, participants, showToast])
 
-  // Remote mute specific participant (Co-hosts and Admins can mute anyone)
+  // Remote mute specific participant
   const handleMuteTarget = useCallback(async (identity: string) => {
     try {
       const targetUser = roomRef.current?.remoteParticipants.get(identity)
@@ -367,7 +503,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }, [meetingId, showToast])
 
-  // Remote unmute request (sends data channel invitation to target)
+  // Remote unmute request
   const handleUnmuteRequest = useCallback((identity: string) => {
     const room = roomRef.current
     if (!room) return
@@ -390,7 +526,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      // Broadcast Co-host update to everyone in room via data channel
       const room = roomRef.current
       if (room) {
         const textEncoder = new TextEncoder()
@@ -404,7 +539,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         room.localParticipant.publishData(payload, { reliable: true })
       }
 
-      // Update local state immediately
       setModerators((prev) => {
         const next = [...prev, identity]
         rebuildParticipants(room!, selfIdentity, next)
@@ -416,7 +550,100 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }, [meetingId, selfIdentity, rebuildParticipants, showToast])
 
-  // Send real-time Chat message
+  // Local Screenshare start helper
+  const startScreenSharingLocally = async () => {
+    const room = roomRef.current
+    if (!room) return
+    try {
+      await room.localParticipant.setScreenShareEnabled(true)
+      setIsScreenSharing(true)
+    } catch (err) {
+      console.error('Screenshare launch failed:', err)
+    }
+  }
+
+  // Handle local Screenshare button trigger
+  const handleToggleScreenshare = async () => {
+    const room = roomRef.current
+    if (!room) return
+
+    if (isScreenSharing) {
+      await room.localParticipant.setScreenShareEnabled(false)
+      setIsScreenSharing(false)
+      return
+    }
+
+    const isMod = moderators.includes(selfIdentity)
+    
+    // Co-hosts and hosts bypass requests - can share instantly
+    if (isMod) {
+      // Forcefully terminate existing screenshare signal if active
+      if (currentScreenSharer && currentScreenSharer !== selfIdentity) {
+        const textEncoder = new TextEncoder()
+        const stopPayload = textEncoder.encode(JSON.stringify({ type: 'stop-screenshare-signal' }))
+        room.localParticipant.publishData(stopPayload, { reliable: true })
+      }
+      startScreenSharingLocally()
+      return
+    }
+
+    // Cooldown abuse prevention check for regular participants
+    if (screenshareCooldown) {
+      showToast('Wait a bit before requesting to share screen again.')
+      return
+    }
+
+    // Send Screenshare permission request to Host / Co-host / Active screensharer
+    const textEncoder = new TextEncoder()
+    const payload = textEncoder.encode(
+      JSON.stringify({ type: 'screenshare-request' })
+    )
+    room.localParticipant.publishData(payload, { reliable: true })
+    showToast('Sent screenshare request to host. Waiting for approval...')
+
+    // Activate 15-second request spam cooldown
+    setScreenshareCooldown(true)
+    setTimeout(() => setScreenshareCooldown(false), 15000)
+  };
+
+  // Approve Screenshare Request
+  const handleApproveScreenshare = () => {
+    if (!screenshareRequest || !roomRef.current) return
+    
+    const textEncoder = new TextEncoder()
+    
+    // 1. If currently sharing screen, stop local share
+    if (isScreenSharing) {
+      roomRef.current.localParticipant.setScreenShareEnabled(false)
+      setIsScreenSharing(false)
+    } else if (currentScreenSharer) {
+      // If someone else is sharing, signal them to stop
+      const stopPayload = textEncoder.encode(JSON.stringify({ type: 'stop-screenshare-signal' }))
+      roomRef.current.localParticipant.publishData(stopPayload, { reliable: true })
+    }
+
+    // 2. Approve target screenshare
+    const approvePayload = textEncoder.encode(
+      JSON.stringify({ type: 'screenshare-approved', target: screenshareRequest.identity })
+    )
+    roomRef.current.localParticipant.publishData(approvePayload, { reliable: true })
+    
+    setScreenshareRequest(null)
+    showToast(`Approved screenshare request for ${screenshareRequest.name}`)
+  }
+
+  // Deny Screenshare Request
+  const handleDenyScreenshare = () => {
+    if (!screenshareRequest || !roomRef.current) return
+    const textEncoder = new TextEncoder()
+    const denyPayload = textEncoder.encode(
+      JSON.stringify({ type: 'screenshare-denied', target: screenshareRequest.identity })
+    )
+    roomRef.current.localParticipant.publishData(denyPayload, { reliable: true })
+    setScreenshareRequest(null)
+  }
+
+  // Send Chat message
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault()
     if (!chatInput.trim()) return
@@ -429,7 +656,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       )
       room.localParticipant.publishData(payload, { reliable: true })
       
-      // Add local message immediately
       setChatMessages((prev) => [
         ...prev,
         {
@@ -443,7 +669,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     setChatInput('')
   }
 
-  // Send emoji reaction
+  // Send Emoji reaction
   const handleSendReaction = (emoji: string) => {
     const room = roomRef.current
     if (room) {
@@ -453,7 +679,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       )
       room.localParticipant.publishData(payload, { reliable: false })
       
-      // Local immediate feedback
       setReactions((prev) => ({ ...prev, [selfIdentity]: emoji }))
       setTimeout(() => {
         setReactions((prev) => {
@@ -465,7 +690,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }
 
-  // Combine reactions with UI participants state
   const participantsWithReactions = useMemo(() => {
     return participants.map((p) => ({
       ...p,
@@ -473,7 +697,59 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }))
   }, [participants, reactions])
 
-  // --- Loading State ---
+  // --- waiting lobby UI view ---
+  if (lobbyStatus === 'pending') {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-black px-4 text-center text-zinc-100">
+        <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-8 space-y-6 shadow-2xl">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 text-white animate-pulse">
+            <Monitor className="size-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Waiting Room</h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              The host has been notified that you are waiting. You will join the meeting as soon as they let you in.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Link
+              href="/dashboard"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-800 border border-zinc-700 py-3 text-xs font-semibold text-zinc-300 hover:bg-zinc-750 transition"
+            >
+              Cancel &amp; Return
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // --- lobby entry denied UI view ---
+  if (lobbyStatus === 'denied') {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-black px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-center space-y-5 shadow-2xl text-zinc-100">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-red-950 border border-red-900 text-red-400">
+            <AlertTriangle className="size-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Request Declined</h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              You were not allowed to enter this meeting.
+            </p>
+          </div>
+          <Link
+            href="/dashboard"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-xs font-bold text-black hover:bg-zinc-200 transition"
+          >
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // --- connection loading flow UI view ---
   if (loading) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center bg-black text-zinc-400">
@@ -485,7 +761,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     )
   }
 
-  // --- Access Denied / Error ---
+  // --- error UI view ---
   if (error || accessDenied) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-black px-4">
@@ -495,22 +771,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           </div>
           <div>
             <h2 className="text-xl font-bold text-white">Access Denied</h2>
-            <p className="mt-2 text-sm text-zinc-450">{error || 'You are not authorized to join.'}</p>
+            <p className="mt-2 text-sm text-zinc-450">{error || 'Access error.'}</p>
           </div>
-          {accessDenied && accessDenied.allowedDomains.length > 0 && (
-            <div className="rounded-xl border border-zinc-800 bg-black p-4 text-left">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                <MailCheck className="size-4" /> Allowed Domains
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {accessDenied.allowedDomains.map((d) => (
-                  <span key={d} className="rounded bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-xs font-mono text-zinc-300">
-                    {d}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
           <Link
             href="/dashboard"
             className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-black hover:bg-zinc-200 transition"
@@ -522,23 +784,39 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     )
   }
 
+  const isMod = moderators.includes(selfIdentity)
+
   return (
     <div className="flex min-h-dvh bg-black overflow-hidden relative">
       
-      {/* Main Room View */}
+      {/* Main Room Container */}
       <div className="flex flex-1 flex-col h-dvh">
         <RoomHeader participantCount={participants.length} meetingId={meetingId} />
 
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10 overflow-y-auto">
+          
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-white" aria-hidden="true" />
-              <h2 className="text-sm font-semibold text-zinc-400">
-                {speakers > 0
+              <h2 className="text-sm font-semibold text-zinc-400 font-mono">
+                {currentScreenSharer
+                  ? `Active Screen Share: ${currentScreenSharer}`
+                  : speakers > 0
                   ? `${speakers} ${speakers === 1 ? 'person is' : 'people are'} speaking`
                   : 'On stage'}
               </h2>
             </div>
+
+            {/* Waiting Room Lobby Button badge visible to Hosts/Moderators */}
+            {isMod && lobbyList.length > 0 && (
+              <button
+                onClick={() => setIsLobbyOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-white bg-white px-3 py-1.5 text-xs font-bold text-black shadow-lg animate-pulse"
+              >
+                <UserCheck className="size-3.5" />
+                <span>Waiting Room ({lobbyList.length})</span>
+              </button>
+            )}
           </div>
 
           <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
@@ -546,8 +824,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
               <li key={participant.id} className="relative group">
                 <ParticipantTile participant={participant} />
                 
-                {/* Admin/Host Mic Action Buttons displayed on hover */}
-                {isAdmin && !participant.isSelf && (
+                {/* Admin Hover Actions Panel */}
+                {isMod && !participant.isSelf && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1 rounded-lg shadow-xl z-20">
                     {participant.isMuted ? (
                       <button
@@ -595,21 +873,40 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           </div>
         )}
 
-        <ControlBar
-          isMuted={isMuted}
-          isAdmin={isAdmin}
-          onToggleMute={toggleMute}
-          onLeave={handleLeave}
-          onMuteEveryone={handleMuteEveryone}
-          onKickParticipant={handleKickParticipant}
-          onSendReaction={handleSendReaction}
-          onToggleChat={() => setIsChatOpen(!isChatOpen)}
-          isChatOpen={isChatOpen}
-          unreadChats={unreadCount}
-        />
+        {/* Bottom Control Actions */}
+        <div className="relative">
+          <ControlBar
+            isMuted={isMuted}
+            isAdmin={isAdmin}
+            onToggleMute={toggleMute}
+            onLeave={handleLeave}
+            onMuteEveryone={handleMuteEveryone}
+            onKickParticipant={handleKickParticipant}
+            onSendReaction={handleSendReaction}
+            onToggleChat={() => setIsChatOpen(!isChatOpen)}
+            isChatOpen={isChatOpen}
+            unreadChats={unreadCount}
+          />
+          
+          {/* Custom Screenshare Trigger floating on top of control bar */}
+          <div className="absolute right-4 bottom-5 sm:right-8 z-30">
+            <button
+              onClick={handleToggleScreenshare}
+              className={`flex size-12 items-center justify-center rounded-full border transition-colors ${
+                isScreenSharing
+                  ? 'border-red-500 bg-red-950 text-red-400'
+                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-white'
+              }`}
+              title="Share Screen"
+            >
+              <Monitor className="size-5" />
+            </button>
+          </div>
+        </div>
+
       </div>
 
-      {/* Real-time Chat Side Panel */}
+      {/* Real-time Chat sidebar Panel */}
       {isChatOpen && (
         <div className="w-80 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0">
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
@@ -622,11 +919,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             </button>
           </div>
 
-          {/* Chat Messages */}
           <div className="flex-1 p-4 overflow-y-auto space-y-3.5">
             {chatMessages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-zinc-550 text-center px-4">
-                <p className="text-xs">No messages yet. Send a message to get started!</p>
+              <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-center px-4">
+                <p className="text-xs">No messages yet.</p>
               </div>
             ) : (
               chatMessages.map((msg, i) => (
@@ -635,7 +931,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                     <span>{msg.senderName}</span>
                     <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
-                  <p className="bg-zinc-900 border border-zinc-850 p-2.5 rounded-lg text-zinc-200 select-all leading-relaxed break-words">
+                  <p className="bg-zinc-900 border border-zinc-850 p-2.5 rounded-lg text-zinc-200 leading-relaxed break-words">
                     {msg.text}
                   </p>
                 </div>
@@ -643,7 +939,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             )}
           </div>
 
-          {/* Message input */}
           <form onSubmit={handleSendChat} className="p-4 border-t border-zinc-800 flex gap-2">
             <input
               type="text"
@@ -662,7 +957,89 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         </div>
       )}
 
-      {/* Host requested you to unmute popup */}
+      {/* Waiting Room Queue Lobby sidebar Panel (visible to host/moderators) */}
+      {isMod && isLobbyOpen && (
+        <div className="w-80 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0">
+          <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+            <h3 className="font-bold text-white text-sm">Waiting Room Queue</h3>
+            <button
+              onClick={() => setIsLobbyOpen(false)}
+              className="text-zinc-500 hover:text-white"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 p-4 overflow-y-auto space-y-3.5">
+            {lobbyList.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-center px-4">
+                <p className="text-xs">Waiting room is empty.</p>
+              </div>
+            ) : (
+              lobbyList.map((p) => (
+                <div key={p.email} className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 space-y-3">
+                  <div className="text-xs">
+                    <p className="font-bold text-white truncate">{p.name}</p>
+                    <p className="text-[10px] text-zinc-400 truncate">{p.email}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleLobbyAction(p.email, 'deny')}
+                      className="flex-1 rounded bg-zinc-800 border border-zinc-700 py-1 text-[11px] text-zinc-350 hover:bg-zinc-750 transition"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      onClick={() => handleLobbyAction(p.email, 'approve')}
+                      className="flex-1 rounded bg-white py-1 text-[11px] text-black font-bold hover:bg-zinc-200 transition"
+                    >
+                      Allow In
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          
+          <div className="p-4 border-t border-zinc-800 text-center">
+            <p className="text-[10px] text-zinc-500">Waiting room security rules applied</p>
+          </div>
+        </div>
+      )}
+
+      {/* Screenshare request popup overlay */}
+      {screenshareRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl text-center space-y-4">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 text-white animate-pulse">
+              <Monitor className="size-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-lg">Screenshare Request</h3>
+              <p className="text-sm text-zinc-450 mt-1">
+                <span className="text-white font-bold">{screenshareRequest.name}</span> is requesting to share their screen.
+                {currentScreenSharer && ' This will stop the current screen sharing session.'}
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleDenyScreenshare}
+                className="flex-1 rounded-xl bg-zinc-800 border border-zinc-700 py-2.5 text-xs font-semibold text-zinc-350 hover:bg-zinc-750 transition"
+              >
+                Deny
+              </button>
+              <button
+                onClick={handleApproveScreenshare}
+                className="flex-1 rounded-xl bg-white py-2.5 text-xs font-bold text-black hover:bg-zinc-200 transition"
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Host requested you to unmute popup overlay */}
       {showUnmuteRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl text-center space-y-4">
@@ -672,7 +1049,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             <div>
               <h3 className="font-bold text-white text-lg">Unmute Microphone</h3>
               <p className="text-sm text-zinc-400 mt-1">
-                The host has requested that you unmute your microphone to speak.
+                The host has requested that you unmute your microphone.
               </p>
             </div>
             <div className="flex gap-2 pt-2">
@@ -687,7 +1064,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                   setShowUnmuteRequest(false)
                   if (isMuted) toggleMute()
                 }}
-                className="flex-1 rounded-xl bg-white py-2.5 text-xs font-bold text-black hover:bg-zinc-200 transition"
+                className="flex-1 rounded-xl bg-white py-2.5 text-xs font-bold text-black hover:bg-zinc-250 transition"
               >
                 Unmute Now
               </button>
