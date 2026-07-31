@@ -236,20 +236,22 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
     // Merge in participants who disconnected less than 30 seconds ago (grace period)
     const now = Date.now()
-    Object.entries(awayParticipantsRef.current).forEach(([id, info]) => {
-      if (now - info.disconnectedAt < 30000) {
-        all.push({
-          id,
-          name: info.name,
-          avatar: '',
-          isAdmin: info.isAdmin,
-          isSpeaking: false,
-          isMuted: info.isMuted,
-          isSelf: false,
-          isAway: true,
-        })
-      }
-    })
+    if (awayParticipantsRef.current) {
+      Object.entries(awayParticipantsRef.current).forEach(([id, info]) => {
+        if (info && info.disconnectedAt && (now - info.disconnectedAt < 30000)) {
+          all.push({
+            id,
+            name: info.name || id,
+            avatar: '',
+            isAdmin: !!info.isAdmin,
+            isSpeaking: false,
+            isMuted: !!info.isMuted,
+            isSelf: false,
+            isAway: true,
+          })
+        }
+      })
+    }
 
     setParticipants(all)
 
@@ -506,8 +508,11 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
         livekitRoom
           .on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
+            if (!p || !p.identity) return
             // Remove from away list if they returned
-            delete awayParticipantsRef.current[p.identity]
+            if (awayParticipantsRef.current) {
+              delete awayParticipantsRef.current[p.identity]
+            }
 
             p.on(ParticipantEvent.IsSpeakingChanged, refresh)
             p.on(ParticipantEvent.TrackMuted, refresh)
@@ -515,26 +520,31 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             refresh()
           })
           .on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
+            if (!p || !p.identity) return
             const identity = p.identity
             const name = p.name || p.identity
-            const isAdmin = moderatorsRef.current.includes(p.identity)
+            const isAdmin = moderatorsRef.current ? moderatorsRef.current.includes(p.identity) : false
 
             // Put them on the away list
-            awayParticipantsRef.current[identity] = {
-              name,
-              isAdmin,
-              isMuted: true,
-              disconnectedAt: Date.now(),
+            if (awayParticipantsRef.current) {
+              awayParticipantsRef.current[identity] = {
+                name,
+                isAdmin,
+                isMuted: true,
+                disconnectedAt: Date.now(),
+              }
             }
             refresh()
 
             // Remove permanently after 30 seconds if they don't reconnect
             setTimeout(() => {
-              const entry = awayParticipantsRef.current[identity]
-              if (entry && Date.now() - entry.disconnectedAt >= 30000) {
-                delete awayParticipantsRef.current[identity]
-                showToast(`${name} left the room.`)
-                refresh()
+              if (awayParticipantsRef.current) {
+                const entry = awayParticipantsRef.current[identity]
+                if (entry && Date.now() - entry.disconnectedAt >= 30000) {
+                  delete awayParticipantsRef.current[identity]
+                  showToast(`${name} left the room.`)
+                  refresh()
+                }
               }
             }, 30000)
           })
