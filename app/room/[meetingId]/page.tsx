@@ -211,6 +211,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
   const [toast, setToast] = useState<string | null>(null)
   const roomRef = useRef<Room | null>(null)
+  const connectedOnceRef = useRef(false)
 
   // Advanced Ref architecture to completely eliminate disconnect/reconnect loops
   const selfIdentityRef = useRef(selfIdentity)
@@ -469,6 +470,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   // Start connect flow (runs exactly once per mount or lobby status shift to approved)
   useEffect(() => {
     if (lobbyStatus === 'pending' || lobbyStatus === 'denied') return
+    // Prevent re-running if we already connected successfully
+    if (connectedOnceRef.current) return
     let cancelled = false
 
     async function connect() {
@@ -631,6 +634,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
         await livekitRoom.localParticipant.setMicrophoneEnabled(false)
 
+        connectedOnceRef.current = true
         setConnected(true)
         setLoading(false)
         refresh()
@@ -648,7 +652,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
     return () => {
       cancelled = true
-      roomRef.current?.disconnect()
+      // Only disconnect if we haven't marked a successful connection
+      if (!connectedOnceRef.current) {
+        roomRef.current?.disconnect()
+      }
     }
   }, [meetingId, router, showToast, lobbyStatus])
 
