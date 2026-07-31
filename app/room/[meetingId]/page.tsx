@@ -465,6 +465,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           .on(RoomEvent.ActiveSpeakersChanged, refresh)
           .on(RoomEvent.LocalTrackPublished, refresh)
           .on(RoomEvent.LocalTrackUnpublished, refresh)
+          .on(RoomEvent.TrackPublished, refresh)
+          .on(RoomEvent.TrackUnpublished, refresh)
           .on(RoomEvent.TrackSubscribed, refresh)
           .on(RoomEvent.TrackUnsubscribed, refresh)
           .on(RoomEvent.DataReceived, (payload, participant) => {
