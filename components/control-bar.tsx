@@ -53,7 +53,7 @@ export function ControlBar({
           <MessageSquare className="size-5" />
           {!isChatOpen && unreadChats > 0 && (
             <span className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-white border-2 border-black text-black font-bold text-[9px] animate-pulse">
-              {unreadChats}
+              {unreadChats > 9 ? '9+' : unreadChats}
             </span>
           )}
         </button>
