@@ -15,7 +15,7 @@ import { RoomHeader } from '@/components/room-header'
 import { ParticipantTile } from '@/components/participant-tile'
 import { ControlBar } from '@/components/control-bar'
 import type { Participant as UiParticipant } from '@/lib/room-data'
-import { Lock, MailCheck, ArrowLeft, Send, X, Shield, VolumeX, Mic, Monitor, UserCheck, AlertTriangle } from 'lucide-react'
+import { Lock, MailCheck, ArrowLeft, Send, X, Shield, VolumeX, Mic, Monitor, UserCheck, AlertTriangle, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -756,6 +756,23 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }, [meetingId, participants, showToast])
 
+  // Remove / Kick specific individual participant
+  const handleKickTarget = useCallback(async (identity: string, name: string) => {
+    try {
+      const res = await fetch('/api/livekit/admin-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetingId, action: 'kick-user', targetIdentity: identity }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      showToast(`${name} was removed from the room.`)
+      rebuildParticipantsRef.current()
+    } catch (err: any) {
+      showToast(err.message || 'Failed to remove participant.')
+    }
+  }, [meetingId, showToast])
+
   // Remote mute specific participant
   const handleMuteTarget = useCallback(async (identity: string) => {
     try {
@@ -1222,16 +1239,28 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                           )}
                           
                           {!participant.isAdmin && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handlePromoteCohost(participant.id, participant.name)
-                              }}
-                              className="admin-option-btn w-full text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center justify-center gap-1"
-                              title="Promote to Co-host"
-                            >
-                              <Shield className="size-3" /> Co-host
-                            </button>
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handlePromoteCohost(participant.id, participant.name)
+                                }}
+                                className="admin-option-btn w-full text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center justify-center gap-1"
+                                title="Promote to Co-host"
+                              >
+                                <Shield className="size-3" /> Co-host
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleKickTarget(participant.id, participant.name)
+                                }}
+                                className="admin-option-btn w-full text-[10px] font-bold bg-red-950/80 hover:bg-red-900 border border-red-800/80 px-2 py-1 rounded text-red-300 flex items-center justify-center gap-1"
+                                title="Remove Participant"
+                              >
+                                <UserX className="size-3" /> Remove
+                              </button>
+                            </>
                           )}
                         </div>
                       )}
@@ -1284,16 +1313,28 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                       )}
                       
                       {!participant.isAdmin && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handlePromoteCohost(participant.id, participant.name)
-                          }}
-                          className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
-                          title="Promote to Co-host"
-                        >
-                          <Shield className="size-3" /> Co-host
-                        </button>
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handlePromoteCohost(participant.id, participant.name)
+                            }}
+                            className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
+                            title="Promote to Co-host"
+                          >
+                            <Shield className="size-3" /> Co-host
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleKickTarget(participant.id, participant.name)
+                            }}
+                            className="admin-option-btn text-[10px] font-bold bg-red-950/80 hover:bg-red-900 border border-red-800/80 px-2 py-1 rounded text-red-300 flex items-center gap-1"
+                            title="Remove Participant"
+                          >
+                            <UserX className="size-3" /> Remove
+                          </button>
+                        </>
                       )}
                     </div>
                   )}
