@@ -1,8 +1,17 @@
 export async function sendOtpEmail(email: string, code: string) {
   const apiKey = process.env.BREVO_API_KEY
-  // IMPORTANT: This must be a Brevo-verified sender email address
-  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'sivadhanushkotturu@gmail.com'
-  const senderName = process.env.BREVO_SENDER_NAME || 'ZoomClone Auth'
+  let senderEmail = process.env.BREVO_SENDER_EMAIL || 'sivadhanushkotturu@gmail.com'
+  let senderName = process.env.BREVO_SENDER_NAME || 'PhotoDrive'
+
+  // Parse "Name <email@domain.com>" format if provided
+  if (senderEmail.includes('<') && senderEmail.includes('>')) {
+    const match = senderEmail.match(/([^<]+)<([^>]+)>/)
+    if (match) {
+      senderName = match[1].trim()
+      senderEmail = match[2].trim()
+    }
+  }
+
 
   console.log(`[AUTH OTP] Verification code for ${email} is: ${code}`)
 
