@@ -1330,7 +1330,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           isHost={selfIdentity.toLowerCase() === moderators[0]?.toLowerCase()}
           onEndMeeting={() => setShowEndMeetingPrompt(true)}
           isScreenSharing={isScreenSharing}
-          onToggleScreenshare={handleToggleScreenshare}
+          onToggleScreenshare={isMobile ? undefined : handleToggleScreenshare}
         />
 
       </div>
