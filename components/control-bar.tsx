@@ -15,6 +15,7 @@ type ControlBarProps = {
   onSendReaction: (emoji: string) => void
   onToggleChat: () => void
   isChatOpen: boolean
+  unreadChats?: number
 }
 
 const EMOJIS = ['👍', '✋', '❤️', '👏', '😂']
@@ -29,6 +30,7 @@ export function ControlBar({
   onSendReaction,
   onToggleChat,
   isChatOpen,
+  unreadChats = 0,
 }: ControlBarProps) {
   const [showEmojiMenu, setShowEmojiMenu] = useState(false)
 
@@ -42,13 +44,18 @@ export function ControlBar({
           onClick={onToggleChat}
           aria-label="Toggle chat"
           className={cn(
-            'flex size-12 items-center justify-center rounded-full border transition-colors',
+            'flex size-12 items-center justify-center rounded-full border transition-colors relative',
             isChatOpen
               ? 'border-white bg-white text-black'
               : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-white',
           )}
         >
           <MessageSquare className="size-5" />
+          {!isChatOpen && unreadChats > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-white border-2 border-black text-black font-bold text-[9px] animate-pulse">
+              {unreadChats}
+            </span>
+          )}
         </button>
 
         {/* Emoji Reactions Picker */}

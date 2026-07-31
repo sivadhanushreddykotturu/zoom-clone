@@ -74,6 +74,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  const isChatOpenRef = useRef(isChatOpen)
+  useEffect(() => {
+    isChatOpenRef.current = isChatOpen
+    if (isChatOpen) {
+      setUnreadCount(0)
+    }
+  }, [isChatOpen])
 
   // Reactions state
   const [reactions, setReactions] = useState<{ [identity: string]: string }>({})
@@ -129,6 +138,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
               timestamp: Date.now(),
             },
           ])
+          if (!isChatOpenRef.current) {
+            setUnreadCount((c) => c + 1)
+          }
         } else if (message.type === 'reaction') {
           setReactions((prev) => ({ ...prev, [senderId]: message.emoji }))
           // Clear reaction after 3 seconds
@@ -593,6 +605,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           onSendReaction={handleSendReaction}
           onToggleChat={() => setIsChatOpen(!isChatOpen)}
           isChatOpen={isChatOpen}
+          unreadChats={unreadCount}
         />
       </div>
 
