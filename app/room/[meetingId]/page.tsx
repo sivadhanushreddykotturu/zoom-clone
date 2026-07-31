@@ -52,7 +52,7 @@ function toUiParticipant(
   let isSpeaking = p.isSpeaking ?? false
   const publications = getTrackPublications(p)
   for (const pub of publications) {
-    if (pub.kind === Track.Kind.Audio) {
+    if (pub && pub.kind === Track.Kind.Audio) {
       isMuted = pub.isMuted ?? true
       break
     }
@@ -290,13 +290,11 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     let activeSharer: string | null = null
     const allParticipants = [room.localParticipant, ...Array.from(room.remoteParticipants.values())].filter(Boolean)
     for (const p of allParticipants) {
-      const publications = p.trackPublications || p.tracks
-      if (publications) {
-        for (const pub of publications.values()) {
-          if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
-            activeSharer = p.identity
-            break
-          }
+      const publications = getTrackPublications(p)
+      for (const pub of publications) {
+        if (pub && pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+          activeSharer = p.identity
+          break
         }
       }
     }
