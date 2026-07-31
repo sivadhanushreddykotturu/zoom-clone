@@ -21,20 +21,20 @@ function VoiceBars() {
 export function ParticipantTile({
   participant,
 }: {
-  participant: Participant & { reaction?: string }
+  participant: Participant & { reaction?: string; isAway?: boolean }
 }) {
-  const { name, isAdmin, isSpeaking, isMuted, isSelf, id, reaction } = participant
+  const { name, isAdmin, isSpeaking, isMuted, isSelf, id, reaction, isAway } = participant
 
   // Generate unique Dicebear adventurer avatar using user's name/ID as seed
   const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(id || name)}`
 
   return (
-    <div className="flex flex-col items-center gap-3 text-center">
+    <div className={cn("flex flex-col items-center gap-3 text-center transition-opacity duration-300", isAway && "opacity-40")}>
       <div className="relative">
         <div
           className={cn(
             'relative rounded-full p-[3px] transition-shadow duration-300',
-            isSpeaking
+            isSpeaking && !isAway
               ? 'ring-2 ring-white ring-offset-2 ring-offset-black'
               : 'ring-1 ring-zinc-800',
           )}
@@ -51,14 +51,14 @@ export function ParticipantTile({
         </div>
 
         {/* Floating Emoji Reaction Overlay */}
-        {reaction && (
+        {reaction && !isAway && (
           <span className="absolute -top-2 -right-2 animate-bounce text-2xl z-10 select-none bg-zinc-900 border border-zinc-850 p-1.5 rounded-full shadow-lg">
             {reaction}
           </span>
         )}
 
         {/* Speaking indicator badge */}
-        {isSpeaking && (
+        {isSpeaking && !isAway && (
           <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 px-2 py-1 shadow-lg">
             <VoiceBars />
             <span className="sr-only">Speaking</span>
@@ -75,10 +75,15 @@ export function ParticipantTile({
       </div>
 
       <div className="flex max-w-[7rem] flex-col items-center gap-1">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap justify-center">
           <span className="truncate text-sm font-medium text-zinc-300">
             {isSelf ? 'You' : name}
           </span>
+          {isAway && (
+            <span className="text-[9px] font-mono text-zinc-500 bg-zinc-900 border border-zinc-850 px-1 rounded">
+              Away
+            </span>
+          )}
           {isAdmin && (
             <span
               className="flex items-center gap-1 rounded bg-zinc-800 border border-zinc-700 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-300"

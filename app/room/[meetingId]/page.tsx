@@ -167,6 +167,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   const [currentScreenSharer, setCurrentScreenSharer] = useState<string | null>(null)
   const [screenshareRequest, setScreenshareRequest] = useState<{ identity: string; name: string } | null>(null)
   const [screenshareCooldown, setScreenshareCooldown] = useState(false)
+  const [meetingTitle, setMeetingTitle] = useState('')
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
 
   // Host unmute request popup state
   const [showUnmuteRequest, setShowUnmuteRequest] = useState(false)
@@ -185,6 +187,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   const currentScreenSharerRef = useRef(currentScreenSharer)
   const isScreenSharingRef = useRef(isScreenSharing)
   const isChatOpenRef = useRef(isChatOpen)
+  const awayParticipantsRef = useRef<{
+    [id: string]: { name: string; isAdmin: boolean; isMuted: boolean; disconnectedAt: number }
+  }>({})
 
   useEffect(() => { selfIdentityRef.current = selfIdentity }, [selfIdentity])
   useEffect(() => { selfNameRef.current = selfName }, [selfName])
@@ -223,6 +228,24 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     for (const p of room.remoteParticipants.values()) {
       all.push(toUiParticipant(p, identity, mods))
     }
+
+    // Merge in participants who disconnected less than 30 seconds ago (grace period)
+    const now = Date.now()
+    Object.entries(awayParticipantsRef.current).forEach(([id, info]) => {
+      if (now - info.disconnectedAt < 30000) {
+        all.push({
+          id,
+          name: info.name,
+          avatar: '',
+          isAdmin: info.isAdmin,
+          isSpeaking: false,
+          isMuted: info.isMuted,
+          isSelf: false,
+          isAway: true,
+        })
+      }
+    })
+
     setParticipants(all)
 
     // Detect if someone is screensharing in the room
@@ -449,7 +472,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           return
         }
 
-        const { token, serverUrl } = data
+        const { token, serverUrl, meetingTitle } = data
         const identity = data.user?.email || ''
         const name = data.user?.name || identity.split('@')[0]
         const mods: string[] = data.moderators || []
@@ -457,6 +480,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         setSelfIdentity(identity)
         setSelfName(name)
         setModerators(mods)
+        setMeetingTitle(meetingTitle || '')
         setLobbyStatus('approved')
 
         // Mock Bypass
@@ -477,14 +501,37 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
         livekitRoom
           .on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
+            // Remove from away list if they returned
+            delete awayParticipantsRef.current[p.identity]
+
             p.on(ParticipantEvent.IsSpeakingChanged, refresh)
             p.on(ParticipantEvent.TrackMuted, refresh)
             p.on(ParticipantEvent.TrackUnmuted, refresh)
             refresh()
           })
           .on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
-            showToast(`${p.name || p.identity} left the room.`)
+            const identity = p.identity
+            const name = p.name || p.identity
+            const isAdmin = moderatorsRef.current.includes(p.identity)
+
+            // Put them on the away list
+            awayParticipantsRef.current[identity] = {
+              name,
+              isAdmin,
+              isMuted: true,
+              disconnectedAt: Date.now(),
+            }
             refresh()
+
+            // Remove permanently after 30 seconds if they don't reconnect
+            setTimeout(() => {
+              const entry = awayParticipantsRef.current[identity]
+              if (entry && Date.now() - entry.disconnectedAt >= 30000) {
+                delete awayParticipantsRef.current[identity]
+                showToast(`${name} left the room.`)
+                refresh()
+              }
+            }, 30000)
           })
           .on(RoomEvent.TrackMuted, refresh)
           .on(RoomEvent.TrackUnmuted, refresh)
@@ -506,10 +553,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           .on(RoomEvent.DataReceived, (payload, participant) => {
             handleDataReceivedRef.current(payload, participant)
           })
-          .on(RoomEvent.Disconnected, () => {
+          .on(RoomEvent.Disconnected, (reason) => {
             if (!cancelled) {
-              showToast('You left the room.')
+              if (reason === 'kicked') {
+                showToast('You were removed from the room by the host.')
+              } else {
+                showToast('You have been disconnected from the meeting.')
+              }
               setConnected(false)
+              router.push('/dashboard')
             }
           })
 
@@ -1012,9 +1064,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       
       {/* Main Room Container */}
       <div className="flex flex-1 flex-col h-dvh">
-        <RoomHeader participantCount={participants.length} meetingId={meetingId} />
+        <RoomHeader participantCount={participants.length} meetingId={meetingId} title={meetingTitle} />
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10 overflow-y-auto">
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10 overflow-y-auto pb-28">
           
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1031,7 +1083,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             {/* Waiting Room Lobby Button badge visible to Hosts/Moderators */}
             {isMod && lobbyList.length > 0 && (
               <button
-                onClick={() => setIsLobbyOpen(true)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsLobbyOpen(true)
+                }}
                 className="flex items-center gap-1.5 rounded-lg border border-white bg-white px-3 py-1.5 text-xs font-bold text-black shadow-lg animate-pulse"
               >
                 <UserCheck className="size-3.5" />
@@ -1052,24 +1107,40 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
           <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
             {participantsWithReactions.map((participant) => (
-              <li key={participant.id} className="relative group">
+              <li
+                key={participant.id}
+                className="relative group cursor-pointer"
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest('.admin-option-btn')) return
+                  setActiveMenuId(activeMenuId === participant.id ? null : participant.id)
+                }}
+              >
                 <ParticipantTile participant={participant} />
                 
-                {/* Admin Hover Actions Panel */}
+                {/* Admin Actions Panel (Hover on desktop, click on mobile) */}
                 {isMod && !participant.isSelf && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1 rounded-lg shadow-xl z-20">
+                  <div className={cn(
+                    "absolute -top-3 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-805 p-1 rounded-lg shadow-xl z-20",
+                    activeMenuId === participant.id ? "flex" : "hidden group-hover:flex"
+                  )}>
                     {participant.isMuted ? (
                       <button
-                        onClick={() => handleUnmuteRequest(participant.id)}
-                        className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-white flex items-center gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleUnmuteRequest(participant.id)
+                        }}
+                        className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-white flex items-center gap-1"
                         title="Request Unmute"
                       >
                         <Mic className="size-3" /> Unmute
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleMuteTarget(participant.id)}
-                        className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-red-400 flex items-center gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleMuteTarget(participant.id)
+                        }}
+                        className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-red-400 flex items-center gap-1"
                         title="Mute"
                       >
                         <VolumeX className="size-3" /> Mute
@@ -1078,8 +1149,11 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                     
                     {!participant.isAdmin && (
                       <button
-                        onClick={() => handlePromoteCohost(participant.id, participant.name)}
-                        className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handlePromoteCohost(participant.id, participant.name)
+                        }}
+                        className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
                         title="Promote to Co-host"
                       >
                         <Shield className="size-3" /> Co-host
@@ -1096,7 +1170,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           <div
             role="status"
             aria-live="polite"
-            className="pointer-events-none fixed inset-x-0 bottom-28 z-40 flex justify-center px-4"
+            className="pointer-events-none fixed inset-x-0 bottom-28 z-45 flex justify-center px-4"
           >
             <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-2xl">
               {toast}
@@ -1105,37 +1179,22 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         )}
 
         {/* Bottom Control Actions */}
-        <div className="relative">
-          <ControlBar
-            isMuted={isMuted}
-            isAdmin={isAdmin}
-            onToggleMute={toggleMute}
-            onLeave={handleLeave}
-            onMuteEveryone={handleMuteEveryone}
-            onKickParticipant={handleKickParticipant}
-            onSendReaction={handleSendReaction}
-            onToggleChat={() => setIsChatOpen(!isChatOpen)}
-            isChatOpen={isChatOpen}
-            unreadChats={unreadCount}
-            isHost={selfIdentity.toLowerCase() === moderators[0]?.toLowerCase()}
-            onEndMeeting={() => setShowEndMeetingPrompt(true)}
-          />
-          
-          {/* Custom Screenshare Trigger floating on top of control bar */}
-          <div className="absolute right-4 bottom-5 sm:right-8 z-30">
-            <button
-              onClick={handleToggleScreenshare}
-              className={`flex size-12 items-center justify-center rounded-full border transition-colors ${
-                isScreenSharing
-                  ? 'border-red-500 bg-red-950 text-red-400'
-                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-white'
-              }`}
-              title="Share Screen"
-            >
-              <Monitor className="size-5" />
-            </button>
-          </div>
-        </div>
+        <ControlBar
+          isMuted={isMuted}
+          isAdmin={isAdmin}
+          onToggleMute={toggleMute}
+          onLeave={handleLeave}
+          onMuteEveryone={handleMuteEveryone}
+          onKickParticipant={handleKickParticipant}
+          onSendReaction={handleSendReaction}
+          onToggleChat={() => setIsChatOpen(!isChatOpen)}
+          isChatOpen={isChatOpen}
+          unreadChats={unreadCount}
+          isHost={selfIdentity.toLowerCase() === moderators[0]?.toLowerCase()}
+          onEndMeeting={() => setShowEndMeetingPrompt(true)}
+          isScreenSharing={isScreenSharing}
+          onToggleScreenshare={handleToggleScreenshare}
+        />
 
       </div>
 

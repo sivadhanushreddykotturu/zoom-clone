@@ -69,8 +69,21 @@ export async function POST(req: Request) {
     }
 
     if (action === 'kick-user' && targetIdentity) {
-      await roomService.removeParticipant(meetingId, targetIdentity)
-      return NextResponse.json({ success: true, message: `Removed ${targetIdentity} from meeting` })
+      try {
+        await roomService.removeParticipant(meetingId, targetIdentity)
+      } catch (err) {
+        console.warn('[Admin Action] Participant already removed or offline in LiveKit:', err)
+      }
+
+      // Mark their lobby status as denied in MongoDB so they cannot request token to rejoin
+      const cleanTarget = targetIdentity.trim().toLowerCase()
+      const pEntry = meeting.lobby.find((p) => p.email === cleanTarget)
+      if (pEntry) {
+        pEntry.status = 'denied'
+        await meeting.save()
+      }
+
+      return NextResponse.json({ success: true, message: `Removed ${targetIdentity} and blocked from rejoining` })
     }
 
     return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })

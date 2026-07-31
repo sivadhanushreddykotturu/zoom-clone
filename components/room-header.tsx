@@ -26,11 +26,13 @@ export function RoomHeader({
               </span>
             </div>
             <h1 className="mt-1 truncate text-lg font-semibold text-balance text-foreground sm:text-xl">
-              {title || meetingId || 'Meeting Room'}
+              {title && title !== meetingId ? title : 'Meeting Room'}
             </h1>
-            <p className="truncate text-sm text-muted-foreground font-mono">
-              {meetingId}
-            </p>
+            {meetingId && (
+              <p className="truncate text-sm text-muted-foreground font-mono">
+                Code: {meetingId}
+              </p>
+            )}
           </div>
         </div>
 
