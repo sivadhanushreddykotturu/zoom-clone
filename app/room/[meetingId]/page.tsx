@@ -25,7 +25,6 @@ interface ChatMessage {
   timestamp: number
 }
 
-// Convert a LiveKit participant to our UI participant shape
 function toUiParticipant(
   p: Participant,
   selfIdentity: string,
@@ -48,7 +47,7 @@ function toUiParticipant(
   return {
     id: p.identity,
     name: p.name || p.identity,
-    avatar: '', // generated dynamically via Dicebear
+    avatar: '',
     isAdmin,
     isSpeaking,
     isMuted,
@@ -63,7 +62,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   // Room states
   const [loading, setLoading] = useState(true)
   const [lobbyStatus, setLobbyStatus] = useState<'approved' | 'pending' | 'denied' | 'none'>('none')
-  const [lobbyList, setLobbyList] = useState<any[]>([]) // Hosts track pending requests here
+  const [lobbyList, setLobbyList] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
   const [accessDenied, setAccessDenied] = useState<{ allowedDomains: string[] } | null>(null)
   const [connected, setConnected] = useState(false)
@@ -82,7 +81,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   // Reactions state
   const [reactions, setReactions] = useState<{ [identity: string]: string }>({})
 
-  // Host/Co-host waiting room side drawer
+  // Lobby side drawer
   const [isLobbyOpen, setIsLobbyOpen] = useState(false)
 
   // Screensharing state
@@ -94,10 +93,26 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   // Host unmute request popup state
   const [showUnmuteRequest, setShowUnmuteRequest] = useState(false)
 
+  // End Meeting Alert Confirmation Dialog
+  const [showEndMeetingPrompt, setShowEndMeetingPrompt] = useState(false)
+
   const [toast, setToast] = useState<string | null>(null)
   const roomRef = useRef<Room | null>(null)
 
+  // Advanced Ref architecture to completely eliminate disconnect/reconnect loops
+  const selfIdentityRef = useRef(selfIdentity)
+  const selfNameRef = useRef(selfName)
+  const moderatorsRef = useRef(moderators)
+  const currentScreenSharerRef = useRef(currentScreenSharer)
+  const isScreenSharingRef = useRef(isScreenSharing)
   const isChatOpenRef = useRef(isChatOpen)
+
+  useEffect(() => { selfIdentityRef.current = selfIdentity }, [selfIdentity])
+  useEffect(() => { selfNameRef.current = selfName }, [selfName])
+  useEffect(() => { moderatorsRef.current = moderators }, [moderators])
+  useEffect(() => { currentScreenSharerRef.current = currentScreenSharer }, [currentScreenSharer])
+  useEffect(() => { isScreenSharingRef.current = isScreenSharing }, [isScreenSharing])
+
   useEffect(() => {
     isChatOpenRef.current = isChatOpen
     if (isChatOpen) {
@@ -115,6 +130,125 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     return () => clearTimeout(t)
   }, [toast])
 
+  // Build UI participants list
+  const rebuildParticipants = useCallback(() => {
+    const room = roomRef.current
+    if (!room) return
+    const identity = selfIdentityRef.current
+    const mods = moderatorsRef.current
+
+    const all: UiParticipant[] = []
+    if (room.localParticipant) {
+      all.push(toUiParticipant(room.localParticipant, identity, mods))
+    }
+    for (const p of room.remoteParticipants.values()) {
+      all.push(toUiParticipant(p, identity, mods))
+    }
+    setParticipants(all)
+
+    // Detect if someone is screensharing in the room
+    let activeSharer: string | null = null
+    for (const p of room.participants.values()) {
+      for (const pub of p.trackPublications.values()) {
+        if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+          activeSharer = p.identity
+          break
+        }
+      }
+    }
+    setCurrentScreenSharer(activeSharer)
+  }, [])
+
+  const rebuildParticipantsRef = useRef(rebuildParticipants)
+  useEffect(() => {
+    rebuildParticipantsRef.current = rebuildParticipants
+  }, [rebuildParticipants])
+
+  // Handle incoming LiveKit data channel messages
+  const handleDataReceived = useCallback((payload: Uint8Array, participant?: RemoteParticipant) => {
+    const textDecoder = new TextDecoder()
+    const dataStr = textDecoder.decode(payload)
+    try {
+      const message = JSON.parse(dataStr)
+      const senderId = participant?.identity || 'System'
+      const senderName = participant?.name || senderId
+
+      if (message.type === 'chat') {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            sender: senderId,
+            senderName,
+            text: message.text,
+            timestamp: Date.now(),
+          },
+        ])
+        if (!isChatOpenRef.current) {
+          setUnreadCount((c) => c + 1)
+        }
+      } else if (message.type === 'reaction') {
+        setReactions((prev) => ({ ...prev, [senderId]: message.emoji }))
+        setTimeout(() => {
+          setReactions((prev) => {
+            const next = { ...prev }
+            delete next[senderId]
+            return next
+          })
+        }, 3000)
+      } else if (message.type === 'unmute-request') {
+        if (message.target === selfIdentityRef.current) {
+          setShowUnmuteRequest(true)
+        }
+      } else if (message.type === 'cohost-promoted') {
+        setModerators((prev) => {
+          const next = [...prev]
+          if (!next.includes(message.identity)) {
+            next.push(message.identity)
+          }
+          return next
+        })
+        setTimeout(() => {
+          rebuildParticipantsRef.current()
+        }, 100)
+        showToast(`${message.identityName} has been promoted to Co-host.`)
+      } else if (message.type === 'screenshare-request') {
+        const isMod = moderatorsRef.current.includes(selfIdentityRef.current)
+        const isCurrentSharer = currentScreenSharerRef.current === selfIdentityRef.current
+        if (isMod || isCurrentSharer) {
+          setScreenshareRequest({ identity: senderId, name: senderName })
+        }
+      } else if (message.type === 'screenshare-approved') {
+        if (message.target === selfIdentityRef.current) {
+          showToast('Screenshare request approved! Starting share.')
+          startScreenSharingLocally()
+        }
+      } else if (message.type === 'screenshare-denied') {
+        if (message.target === selfIdentityRef.current) {
+          showToast('Host declined your screenshare request.')
+        }
+      } else if (message.type === 'stop-screenshare-signal') {
+        if (isScreenSharingRef.current && roomRef.current) {
+          roomRef.current.localParticipant.setScreenShareEnabled(false)
+          setIsScreenSharing(false)
+          showToast('Host stopped your screenshare.')
+        }
+      } else if (message.type === 'end-meeting-signal') {
+        showToast('The host has ended this meeting.')
+        if (roomRef.current) {
+          roomRef.current.disconnect()
+        }
+        router.push('/dashboard')
+      }
+    } catch (e) {
+      console.error('Error parsing data channel message:', e)
+    }
+  }, [showToast, router])
+
+  const handleDataReceivedRef = useRef(handleDataReceived)
+  useEffect(() => {
+    handleDataReceivedRef.current = handleDataReceived
+  }, [handleDataReceived])
+
   // 1. Lobby Waiting Room Polling Flow
   useEffect(() => {
     if (lobbyStatus !== 'pending') return
@@ -126,7 +260,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           const data = await res.json()
           if (data.status === 'approved') {
             setLobbyStatus('approved')
-            setLoading(true) // restart connection flow
+            setLoading(true)
           } else if (data.status === 'denied') {
             setLobbyStatus('denied')
             setError('The host declined your request to join this meeting.')
@@ -165,118 +299,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     return () => clearInterval(interval)
   }, [connected, moderators, selfIdentity, fetchLobbyList])
 
-  // Build UI participants list
-  const rebuildParticipants = useCallback(
-    (room: Room, identity: string, mods: string[]) => {
-      const all: UiParticipant[] = []
-      if (room.localParticipant) {
-        all.push(toUiParticipant(room.localParticipant, identity, mods))
-      }
-      for (const p of room.remoteParticipants.values()) {
-        all.push(toUiParticipant(p, identity, mods))
-      }
-      setParticipants(all)
-
-      // Also detect if someone is screensharing in the room
-      let activeSharer: string | null = null
-      for (const p of room.participants.values()) {
-        for (const pub of p.trackPublications.values()) {
-          if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
-            activeSharer = p.identity
-            break
-          }
-        }
-      }
-      setCurrentScreenSharer(activeSharer)
-    },
-    [],
-  )
-
-  // Handle incoming LiveKit data channel messages
-  const handleDataReceived = useCallback(
-    (payload: Uint8Array, participant?: RemoteParticipant, kind?: any) => {
-      const textDecoder = new TextDecoder()
-      const dataStr = textDecoder.decode(payload)
-      try {
-        const message = JSON.parse(dataStr)
-        const senderId = participant?.identity || 'System'
-        const senderName = participant?.name || senderId
-
-        if (message.type === 'chat') {
-          setChatMessages((prev) => [
-            ...prev,
-            {
-              sender: senderId,
-              senderName,
-              text: message.text,
-              timestamp: Date.now(),
-            },
-          ])
-          if (!isChatOpenRef.current) {
-            setUnreadCount((c) => c + 1)
-          }
-        } else if (message.type === 'reaction') {
-          setReactions((prev) => ({ ...prev, [senderId]: message.emoji }))
-          setTimeout(() => {
-            setReactions((prev) => {
-              const next = { ...prev }
-              delete next[senderId]
-              return next
-            })
-          }, 3000)
-        } else if (message.type === 'unmute-request') {
-          if (message.target === selfIdentity) {
-            setShowUnmuteRequest(true)
-          }
-        } else if (message.type === 'cohost-promoted') {
-          setModerators((prev) => {
-            const next = [...prev]
-            if (!next.includes(message.identity)) {
-              next.push(message.identity)
-            }
-            if (roomRef.current) {
-              rebuildParticipants(roomRef.current, selfIdentity, next)
-            }
-            return next
-          })
-          showToast(`${message.identityName} has been promoted to Co-host.`)
-        } else if (message.type === 'screenshare-request') {
-          // Only show popup to Host / Co-host (or the current screensharer if active)
-          const isMod = moderators.includes(selfIdentity)
-          const isCurrentSharer = currentScreenSharer === selfIdentity
-          if (isMod || isCurrentSharer) {
-            setScreenshareRequest({ identity: senderId, name: senderName })
-          }
-        } else if (message.type === 'screenshare-approved') {
-          if (message.target === selfIdentity) {
-            showToast('Screenshare request approved! Starting share.')
-            startScreenSharingLocally()
-          }
-        } else if (message.type === 'screenshare-denied') {
-          if (message.target === selfIdentity) {
-            showToast('Host declined your screenshare request.')
-          }
-        } else if (message.type === 'stop-screenshare-signal') {
-          if (isScreenSharing && roomRef.current) {
-            roomRef.current.localParticipant.setScreenShareEnabled(false)
-            setIsScreenSharing(false)
-            showToast('Host stopped your screenshare.')
-          }
-        } else if (message.type === 'end-meeting-signal') {
-          showToast('The host has ended this meeting.')
-          if (roomRef.current) {
-            roomRef.current.disconnect()
-          }
-          router.push('/dashboard')
-        }
-      } catch (e) {
-        console.error('Error parsing data channel message:', e)
-      }
-    },
-    [selfIdentity, rebuildParticipants, showToast, moderators, currentScreenSharer, isScreenSharing, router],
-  )
-
-  // Start connect flow
+  // Start connect flow (runs exactly once per mount or lobby status shift to approved)
   useEffect(() => {
     if (lobbyStatus === 'pending' || lobbyStatus === 'denied') return
     let cancelled = false
@@ -284,9 +307,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     async function connect() {
       try {
         // Try lobby registration first
-        const lobbyCheck = await fetch(`/api/meetings/${meetingId}/lobby`, {
-          method: 'POST',
-        })
+        const lobbyCheck = await fetch(`/api/meetings/${meetingId}/lobby`, { method: 'POST' })
         const lobbyData = await lobbyCheck.json()
         if (lobbyData.status === 'pending') {
           setLobbyStatus('pending')
@@ -330,7 +351,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         setModerators(mods)
         setLobbyStatus('approved')
 
-        // Mock Bypass: If using mock tokens (e.g. no active LiveKit keys configured), bypass real connection
+        // Mock Bypass
         if (token.startsWith('mock_livekit_token_')) {
           setConnected(true)
           setLoading(false)
@@ -344,7 +365,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         const livekitRoom = new Room()
         roomRef.current = livekitRoom
 
-        const refresh = () => rebuildParticipants(livekitRoom, identity, mods)
+        const refresh = () => rebuildParticipantsRef.current()
 
         livekitRoom
           .on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
@@ -364,7 +385,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           .on(RoomEvent.LocalTrackUnpublished, refresh)
           .on(RoomEvent.TrackSubscribed, refresh)
           .on(RoomEvent.TrackUnsubscribed, refresh)
-          .on(RoomEvent.DataReceived, handleDataReceived)
+          .on(RoomEvent.DataReceived, (payload, participant) => {
+            handleDataReceivedRef.current(payload, participant)
+          })
           .on(RoomEvent.Disconnected, () => {
             if (!cancelled) {
               showToast('You left the room.')
@@ -401,7 +424,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       cancelled = true
       roomRef.current?.disconnect()
     }
-  }, [meetingId, router, rebuildParticipants, showToast, handleDataReceived, lobbyStatus])
+  }, [meetingId, router, showToast])
 
   const self = participants.find((p) => p.isSelf)
   const isMuted = self?.isMuted ?? true
@@ -424,53 +447,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     )
   }, [])
 
-  // Check if there are other active co-hosts present in the meeting
-  const hasActiveCohost = useMemo(() => {
-    return participants.some(
-      (p) => !p.isSelf && moderators.includes(p.id)
-    )
-  }, [participants, moderators])
 
-  const [showEndMeetingPrompt, setShowEndMeetingPrompt] = useState(false)
-
-  const handleEndMeeting = useCallback(async () => {
-    const room = roomRef.current
-    if (room) {
-      const textEncoder = new TextEncoder()
-      const payload = textEncoder.encode(JSON.stringify({ type: 'end-meeting-signal' }))
-      try {
-        room.localParticipant.publishData(payload, { reliable: true })
-      } catch (err) {
-        console.error(err)
-      }
-    }
-
-    try {
-      await fetch(`/api/meetings/${meetingId}`, {
-        method: 'DELETE',
-      })
-    } catch (err) {
-      console.error(err)
-    }
-
-    if (room) {
-      room.disconnect()
-    }
-    router.push('/dashboard')
-  }, [meetingId, router])
-
-  const handleLeave = useCallback(async () => {
-    const isHost = selfIdentity.toLowerCase() === moderators[0]?.toLowerCase() // host is the first moderator who created the meeting
-
-    if (isHost && !hasActiveCohost) {
-      // If host is leaving and there are no active co-hosts, show ending meeting warning prompt
-      setShowEndMeetingPrompt(true)
-      return
-    }
-
-    await roomRef.current?.disconnect()
-    router.push('/dashboard')
-  }, [router, selfIdentity, moderators, hasActiveCohost])
 
   // Moderate Waiting Room (Allow / Discard)
   const handleLobbyAction = useCallback(async (targetEmail: string, action: 'approve' | 'deny') => {
@@ -601,14 +578,16 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
       setModerators((prev) => {
         const next = [...prev, identity]
-        rebuildParticipants(room!, selfIdentity, next)
         return next
       })
+      setTimeout(() => {
+        rebuildParticipantsRef.current()
+      }, 100)
       showToast(`${name} is now a Co-host!`)
     } catch (err: any) {
       showToast(err.message || 'Failed to assign Co-host.')
     }
-  }, [meetingId, selfIdentity, rebuildParticipants, showToast])
+  }, [meetingId, showToast])
 
   // Local Screenshare start helper
   const startScreenSharingLocally = async () => {
@@ -637,7 +616,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     
     // Co-hosts and hosts bypass requests - can share instantly
     if (isMod) {
-      // Forcefully terminate existing screenshare signal if active
       if (currentScreenSharer && currentScreenSharer !== selfIdentity) {
         const textEncoder = new TextEncoder()
         const stopPayload = textEncoder.encode(JSON.stringify({ type: 'stop-screenshare-signal' }))
@@ -647,13 +625,11 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       return
     }
 
-    // Cooldown abuse prevention check for regular participants
     if (screenshareCooldown) {
       showToast('Wait a bit before requesting to share screen again.')
       return
     }
 
-    // Send Screenshare permission request to Host / Co-host / Active screensharer
     const textEncoder = new TextEncoder()
     const payload = textEncoder.encode(
       JSON.stringify({ type: 'screenshare-request' })
@@ -661,7 +637,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     room.localParticipant.publishData(payload, { reliable: true })
     showToast('Sent screenshare request to host. Waiting for approval...')
 
-    // Activate 15-second request spam cooldown
     setScreenshareCooldown(true)
     setTimeout(() => setScreenshareCooldown(false), 15000)
   };
@@ -672,17 +647,14 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     
     const textEncoder = new TextEncoder()
     
-    // 1. If currently sharing screen, stop local share
     if (isScreenSharing) {
       roomRef.current.localParticipant.setScreenShareEnabled(false)
       setIsScreenSharing(false)
     } else if (currentScreenSharer) {
-      // If someone else is sharing, signal them to stop
       const stopPayload = textEncoder.encode(JSON.stringify({ type: 'stop-screenshare-signal' }))
       roomRef.current.localParticipant.publishData(stopPayload, { reliable: true })
     }
 
-    // 2. Approve target screenshare
     const approvePayload = textEncoder.encode(
       JSON.stringify({ type: 'screenshare-approved', target: screenshareRequest.identity })
     )
@@ -756,6 +728,51 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       reaction: reactions[p.id] || undefined,
     }))
   }, [participants, reactions])
+
+  // Check if there are other active co-hosts present in the meeting
+  const hasActiveCohost = useMemo(() => {
+    return participants.some(
+      (p) => !p.isSelf && moderators.includes(p.id)
+    )
+  }, [participants, moderators])
+
+  const handleEndMeeting = useCallback(async () => {
+    const room = roomRef.current
+    if (room) {
+      const textEncoder = new TextEncoder()
+      const payload = textEncoder.encode(JSON.stringify({ type: 'end-meeting-signal' }))
+      try {
+        room.localParticipant.publishData(payload, { reliable: true })
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
+    try {
+      await fetch(`/api/meetings/${meetingId}`, {
+        method: 'DELETE',
+      })
+    } catch (err) {
+      console.error(err)
+    }
+
+    if (room) {
+      room.disconnect()
+    }
+    router.push('/dashboard')
+  }, [meetingId, router])
+
+  const handleLeave = useCallback(async () => {
+    const isHost = selfIdentity.toLowerCase() === moderators[0]?.toLowerCase()
+
+    if (isHost && !hasActiveCohost) {
+      setShowEndMeetingPrompt(true)
+      return
+    }
+
+    await roomRef.current?.disconnect()
+    router.push('/dashboard')
+  }, [router, selfIdentity, moderators, hasActiveCohost])
 
   // --- waiting lobby UI view ---
   if (lobbyStatus === 'pending') {
@@ -1019,7 +1036,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         </div>
       )}
 
-      {/* Waiting Room Queue Lobby sidebar Panel (visible to host/moderators) */}
+      {/* Waiting Room Queue Lobby sidebar Panel */}
       {isMod && isLobbyOpen && (
         <div className="w-80 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0">
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
