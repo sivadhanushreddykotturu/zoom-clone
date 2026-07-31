@@ -467,8 +467,16 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           .on(RoomEvent.LocalTrackUnpublished, refresh)
           .on(RoomEvent.TrackPublished, refresh)
           .on(RoomEvent.TrackUnpublished, refresh)
-          .on(RoomEvent.TrackSubscribed, refresh)
-          .on(RoomEvent.TrackUnsubscribed, refresh)
+          .on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+            if (track.kind === Track.Kind.Audio) {
+              track.attach()
+            }
+            refresh()
+          })
+          .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+            track.detach()
+            refresh()
+          })
           .on(RoomEvent.DataReceived, (payload, participant) => {
             handleDataReceivedRef.current(payload, participant)
           })
