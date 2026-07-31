@@ -15,8 +15,15 @@ import { RoomHeader } from '@/components/room-header'
 import { ParticipantTile } from '@/components/participant-tile'
 import { ControlBar } from '@/components/control-bar'
 import type { Participant as UiParticipant } from '@/lib/room-data'
-import { Lock, MailCheck, ArrowLeft } from 'lucide-react'
+import { Lock, MailCheck, ArrowLeft, Send, X, Shield, VolumeX, Mic } from 'lucide-react'
 import Link from 'next/link'
+
+interface ChatMessage {
+  sender: string
+  senderName: string
+  text: string
+  timestamp: number
+}
 
 // Convert a LiveKit participant to our UI participant shape
 function toUiParticipant(
@@ -29,7 +36,6 @@ function toUiParticipant(
     ? moderators.includes(selfIdentity)
     : moderators.includes(p.identity)
 
-  // Check audio track publication to see if muted
   let isMuted = true
   let isSpeaking = p.isSpeaking ?? false
   for (const pub of p.trackPublications.values()) {
@@ -42,20 +48,12 @@ function toUiParticipant(
   return {
     id: p.identity,
     name: p.name || p.identity,
-    avatar: `/avatars/avatar-${Math.abs(hashStr(p.identity) % 8) + 1}.png`,
+    avatar: '', // generated dynamically in ParticipantTile via Dicebear Adventurer
     isAdmin,
     isSpeaking,
     isMuted,
     isSelf,
   }
-}
-
-function hashStr(s: string): number {
-  let hash = 0
-  for (let i = 0; i < s.length; i++) {
-    hash = ((hash << 5) - hash + s.charCodeAt(i)) | 0
-  }
-  return hash
 }
 
 export default function RoomPage({ params }: { params: Promise<{ meetingId: string }> }) {
@@ -68,10 +66,22 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   const [connected, setConnected] = useState(false)
 
   const [selfIdentity, setSelfIdentity] = useState('')
+  const [selfName, setSelfName] = useState('')
   const [moderators, setModerators] = useState<string[]>([])
   const [participants, setParticipants] = useState<UiParticipant[]>([])
-  const [toast, setToast] = useState<string | null>(null)
+  
+  // Real-time Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [isChatOpen, setIsChatOpen] = useState(false)
 
+  // Reactions state
+  const [reactions, setReactions] = useState<{ [identity: string]: string }>({})
+
+  // Host unmute request popup state
+  const [showUnmuteRequest, setShowUnmuteRequest] = useState(false)
+
+  const [toast, setToast] = useState<string | null>(null)
   const roomRef = useRef<Room | null>(null)
 
   const showToast = useCallback((msg: string) => {
@@ -84,7 +94,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     return () => clearTimeout(t)
   }, [toast])
 
-  // Build UI participants from LiveKit room state
+  // Build UI participants
   const rebuildParticipants = useCallback(
     (room: Room, identity: string, mods: string[]) => {
       const all: UiParticipant[] = []
@@ -99,12 +109,67 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     [],
   )
 
+  // Handle incoming LiveKit data channel messages (Chat, Reactions, Moderator Unmute Requests, Co-host promos)
+  const handleDataReceived = useCallback(
+    (payload: Uint8Array, participant?: RemoteParticipant, kind?: any) => {
+      const textDecoder = new TextDecoder()
+      const dataStr = textDecoder.decode(payload)
+      try {
+        const message = JSON.parse(dataStr)
+        const senderId = participant?.identity || 'System'
+        const senderName = participant?.name || senderId
+
+        if (message.type === 'chat') {
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              sender: senderId,
+              senderName,
+              text: message.text,
+              timestamp: Date.now(),
+            },
+          ])
+        } else if (message.type === 'reaction') {
+          setReactions((prev) => ({ ...prev, [senderId]: message.emoji }))
+          // Clear reaction after 3 seconds
+          setTimeout(() => {
+            setReactions((prev) => {
+              const next = { ...prev }
+              delete next[senderId]
+              return next
+            })
+          }, 3000)
+        } else if (message.type === 'unmute-request') {
+          if (message.target === selfIdentity) {
+            setShowUnmuteRequest(true)
+          }
+        } else if (message.type === 'cohost-promoted') {
+          // Add identity to moderators list dynamically
+          setModerators((prev) => {
+            const next = [...prev]
+            if (!next.includes(message.identity)) {
+              next.push(message.identity)
+            }
+            // Trigger rebuild of participants list
+            if (roomRef.current) {
+              rebuildParticipants(roomRef.current, selfIdentity, next)
+            }
+            return next
+          })
+          showToast(`${message.identityName} has been promoted to Co-host.`)
+        }
+      } catch (e) {
+        console.error('Error parsing data channel message:', e)
+      }
+    },
+    [selfIdentity, rebuildParticipants, showToast],
+  )
+
   useEffect(() => {
     let cancelled = false
 
     async function connect() {
       try {
-        // Fetch token + meeting info
         const res = await fetch('/api/livekit/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -125,17 +190,18 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           return
         }
 
-        const { token, serverUrl, isModerator, isHost } = data
+        const { token, serverUrl } = data
         const identity = data.user?.email || ''
+        const name = data.user?.name || identity.split('@')[0]
         const mods: string[] = data.moderators || []
 
         setSelfIdentity(identity)
+        setSelfName(name)
         setModerators(mods)
 
         const livekitRoom = new Room()
         roomRef.current = livekitRoom
 
-        // Wire events
         const refresh = () => rebuildParticipants(livekitRoom, identity, mods)
 
         livekitRoom
@@ -154,9 +220,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           .on(RoomEvent.ActiveSpeakersChanged, refresh)
           .on(RoomEvent.LocalTrackPublished, refresh)
           .on(RoomEvent.LocalTrackUnpublished, refresh)
+          .on(RoomEvent.DataReceived, handleDataReceived)
           .on(RoomEvent.Disconnected, () => {
             if (!cancelled) {
-              showToast('You left the room. See you next time!')
+              showToast('You left the room.')
               setConnected(false)
             }
           })
@@ -190,7 +257,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       cancelled = true
       roomRef.current?.disconnect()
     }
-  }, [meetingId, router, rebuildParticipants, showToast])
+  }, [meetingId, router, rebuildParticipants, showToast, handleDataReceived])
 
   const self = participants.find((p) => p.isSelf)
   const isMuted = self?.isMuted ?? true
@@ -215,9 +282,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
   const handleLeave = useCallback(async () => {
     await roomRef.current?.disconnect()
-    showToast('You left the room. See you next time!')
     router.push('/dashboard')
-  }, [showToast, router])
+  }, [router])
 
   const handleMuteEveryone = useCallback(async () => {
     try {
@@ -255,38 +321,178 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }, [meetingId, participants, showToast])
 
-  // --- Loading state ---
+  // Remote mute specific participant (Co-hosts and Admins can mute anyone)
+  const handleMuteTarget = useCallback(async (identity: string) => {
+    try {
+      const targetUser = roomRef.current?.remoteParticipants.get(identity)
+      if (!targetUser) return
+      let trackSid = ''
+      for (const pub of targetUser.trackPublications.values()) {
+        if (pub.kind === Track.Kind.Audio) {
+          trackSid = pub.trackSid
+          break
+        }
+      }
+      if (!trackSid) return
+
+      const res = await fetch('/api/livekit/admin-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meetingId,
+          action: 'mute-user',
+          targetIdentity: identity,
+          trackSid,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error)
+      }
+      showToast(`Muted ${identity}`)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to mute participant.')
+    }
+  }, [meetingId, showToast])
+
+  // Remote unmute request (sends data channel invitation to target)
+  const handleUnmuteRequest = useCallback((identity: string) => {
+    const room = roomRef.current
+    if (!room) return
+    const textEncoder = new TextEncoder()
+    const payload = textEncoder.encode(
+      JSON.stringify({ type: 'unmute-request', target: identity }),
+    )
+    room.localParticipant.publishData(payload, { reliable: true })
+    showToast(`Unmute request sent to ${identity}.`)
+  }, [showToast])
+
+  // Promote participant to Co-host
+  const handlePromoteCohost = useCallback(async (identity: string, name: string) => {
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newModeratorEmail: identity }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+
+      // Broadcast Co-host update to everyone in room via data channel
+      const room = roomRef.current
+      if (room) {
+        const textEncoder = new TextEncoder()
+        const payload = textEncoder.encode(
+          JSON.stringify({
+            type: 'cohost-promoted',
+            identity,
+            identityName: name,
+          }),
+        )
+        room.localParticipant.publishData(payload, { reliable: true })
+      }
+
+      // Update local state immediately
+      setModerators((prev) => {
+        const next = [...prev, identity]
+        rebuildParticipants(room!, selfIdentity, next)
+        return next
+      })
+      showToast(`${name} is now a Co-host!`)
+    } catch (err: any) {
+      showToast(err.message || 'Failed to assign Co-host.')
+    }
+  }, [meetingId, selfIdentity, rebuildParticipants, showToast])
+
+  // Send real-time Chat message
+  const handleSendChat = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!chatInput.trim()) return
+
+    const room = roomRef.current
+    if (room) {
+      const textEncoder = new TextEncoder()
+      const payload = textEncoder.encode(
+        JSON.stringify({ type: 'chat', text: chatInput.trim() }),
+      )
+      room.localParticipant.publishData(payload, { reliable: true })
+      
+      // Add local message immediately
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          sender: selfIdentity,
+          senderName: selfName,
+          text: chatInput.trim(),
+          timestamp: Date.now(),
+        },
+      ])
+    }
+    setChatInput('')
+  }
+
+  // Send emoji reaction
+  const handleSendReaction = (emoji: string) => {
+    const room = roomRef.current
+    if (room) {
+      const textEncoder = new TextEncoder()
+      const payload = textEncoder.encode(
+        JSON.stringify({ type: 'reaction', emoji }),
+      )
+      room.localParticipant.publishData(payload, { reliable: false })
+      
+      // Local immediate feedback
+      setReactions((prev) => ({ ...prev, [selfIdentity]: emoji }))
+      setTimeout(() => {
+        setReactions((prev) => {
+          const next = { ...prev }
+          delete next[selfIdentity]
+          return next
+        })
+      }, 3000)
+    }
+  }
+
+  // Combine reactions with UI participants state
+  const participantsWithReactions = useMemo(() => {
+    return participants.map((p) => ({
+      ...p,
+      reaction: reactions[p.id] || undefined,
+    }))
+  }, [participants, reactions])
+
+  // --- Loading State ---
   if (loading) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center bg-background text-foreground">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-black text-zinc-400">
         <div className="flex flex-col items-center gap-4">
-          <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Verifying access &amp; connecting…</p>
+          <div className="size-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          <p className="text-sm">Connecting...</p>
         </div>
       </div>
     )
   }
 
-  // --- Access denied / error ---
+  // --- Access Denied / Error ---
   if (error || accessDenied) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-background px-4">
-        <div className="w-full max-w-md space-y-6 rounded-2xl border border-border bg-card p-8 text-center shadow-2xl">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+      <div className="flex min-h-dvh items-center justify-center bg-black px-4">
+        <div className="w-full max-w-md space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-center shadow-2xl">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-red-950 border border-red-800 text-red-400">
             <Lock className="size-6" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-foreground">Access Denied</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{error || 'You are not authorized to join this meeting.'}</p>
+            <h2 className="text-xl font-bold text-white">Access Denied</h2>
+            <p className="mt-2 text-sm text-zinc-450">{error || 'You are not authorized to join.'}</p>
           </div>
           {accessDenied && accessDenied.allowedDomains.length > 0 && (
-            <div className="rounded-xl border border-border bg-muted/40 p-4 text-left">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <MailCheck className="size-4 text-primary" /> Allowed Domains
+            <div className="rounded-xl border border-zinc-800 bg-black p-4 text-left">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                <MailCheck className="size-4" /> Allowed Domains
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {accessDenied.allowedDomains.map((d) => (
-                  <span key={d} className="rounded-md bg-primary/15 px-2.5 py-1 text-xs font-mono text-primary">
+                  <span key={d} className="rounded bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-xs font-mono text-zinc-300">
                     {d}
                   </span>
                 ))}
@@ -295,7 +501,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           )}
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-2 rounded-full bg-card border border-border px-6 py-3 text-sm font-semibold text-foreground hover:bg-accent transition"
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-black hover:bg-zinc-200 transition"
           >
             <ArrowLeft className="size-4" /> Back to Dashboard
           </Link>
@@ -304,50 +510,179 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     )
   }
 
-  // --- Room UI (original design preserved) ---
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
-      <RoomHeader participantCount={participants.length} meetingId={meetingId} />
+    <div className="flex min-h-dvh bg-black overflow-hidden relative">
+      
+      {/* Main Room View */}
+      <div className="flex flex-1 flex-col h-dvh">
+        <RoomHeader participantCount={participants.length} meetingId={meetingId} />
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
-          <h2 className="text-sm font-medium text-muted-foreground">
-            {speakers > 0
-              ? `${speakers} ${speakers === 1 ? 'person is' : 'people are'} speaking`
-              : 'On stage'}
-          </h2>
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10 overflow-y-auto">
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-white" aria-hidden="true" />
+              <h2 className="text-sm font-semibold text-zinc-400">
+                {speakers > 0
+                  ? `${speakers} ${speakers === 1 ? 'person is' : 'people are'} speaking`
+                  : 'On stage'}
+              </h2>
+            </div>
+          </div>
+
+          <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
+            {participantsWithReactions.map((participant) => (
+              <li key={participant.id} className="relative group">
+                <ParticipantTile participant={participant} />
+                
+                {/* Admin/Host Mic Action Buttons displayed on hover */}
+                {isAdmin && !participant.isSelf && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-1 rounded-lg shadow-xl z-20">
+                    {participant.isMuted ? (
+                      <button
+                        onClick={() => handleUnmuteRequest(participant.id)}
+                        className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-white flex items-center gap-1"
+                        title="Request Unmute"
+                      >
+                        <Mic className="size-3" /> Unmute
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleMuteTarget(participant.id)}
+                        className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-red-400 flex items-center gap-1"
+                        title="Mute"
+                      >
+                        <VolumeX className="size-3" /> Mute
+                      </button>
+                    )}
+                    
+                    {!participant.isAdmin && (
+                      <button
+                        onClick={() => handlePromoteCohost(participant.id, participant.name)}
+                        className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
+                        title="Promote to Co-host"
+                      >
+                        <Shield className="size-3" /> Co-host
+                      </button>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </main>
+
+        {toast && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="pointer-events-none fixed inset-x-0 bottom-28 z-40 flex justify-center px-4"
+          >
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white shadow-2xl">
+              {toast}
+            </div>
+          </div>
+        )}
+
+        <ControlBar
+          isMuted={isMuted}
+          isAdmin={isAdmin}
+          onToggleMute={toggleMute}
+          onLeave={handleLeave}
+          onMuteEveryone={handleMuteEveryone}
+          onKickParticipant={handleKickParticipant}
+          onSendReaction={handleSendReaction}
+          onToggleChat={() => setIsChatOpen(!isChatOpen)}
+          isChatOpen={isChatOpen}
+        />
+      </div>
+
+      {/* Real-time Chat Side Panel */}
+      {isChatOpen && (
+        <div className="w-80 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0">
+          <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+            <h3 className="font-bold text-white text-sm">Meeting Chat</h3>
+            <button
+              onClick={() => setIsChatOpen(false)}
+              className="text-zinc-500 hover:text-white"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
+
+          {/* Chat Messages */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-3.5">
+            {chatMessages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-zinc-550 text-center px-4">
+                <p className="text-xs">No messages yet. Send a message to get started!</p>
+              </div>
+            ) : (
+              chatMessages.map((msg, i) => (
+                <div key={i} className="text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-zinc-500 font-bold">
+                    <span>{msg.senderName}</span>
+                    <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <p className="bg-zinc-900 border border-zinc-850 p-2.5 rounded-lg text-zinc-200 select-all leading-relaxed break-words">
+                    {msg.text}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Message input */}
+          <form onSubmit={handleSendChat} className="p-4 border-t border-zinc-800 flex gap-2">
+            <input
+              type="text"
+              placeholder="Send message..."
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              className="flex-1 rounded-xl border border-zinc-800 bg-black px-3.5 py-2 text-xs text-white placeholder-zinc-500 outline-none focus:border-white"
+            />
+            <button
+              type="submit"
+              className="flex size-9 items-center justify-center rounded-xl bg-white text-black hover:bg-zinc-200 transition"
+            >
+              <Send className="size-4" />
+            </button>
+          </form>
         </div>
+      )}
 
-        <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
-          {participants.map((participant) => (
-            <li key={participant.id}>
-              <ParticipantTile participant={participant} />
-            </li>
-          ))}
-        </ul>
-      </main>
-
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="pointer-events-none fixed inset-x-0 bottom-28 z-40 flex justify-center px-4"
-        >
-          <div className="rounded-full border border-border bg-popover px-4 py-2.5 text-sm font-medium text-popover-foreground shadow-2xl shadow-black/40">
-            {toast}
+      {/* Host requested you to unmute popup */}
+      {showUnmuteRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl text-center space-y-4">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-zinc-800 border border-zinc-700 text-white animate-pulse">
+              <Mic className="size-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-lg">Unmute Microphone</h3>
+              <p className="text-sm text-zinc-400 mt-1">
+                The host has requested that you unmute your microphone to speak.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setShowUnmuteRequest(false)}
+                className="flex-1 rounded-xl bg-zinc-800 border border-zinc-700 py-2.5 text-xs font-semibold text-zinc-350 hover:bg-zinc-750 transition"
+              >
+                Decline
+              </button>
+              <button
+                onClick={() => {
+                  setShowUnmuteRequest(false)
+                  if (isMuted) toggleMute()
+                }}
+                className="flex-1 rounded-xl bg-white py-2.5 text-xs font-bold text-black hover:bg-zinc-200 transition"
+              >
+                Unmute Now
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <ControlBar
-        isMuted={isMuted}
-        isAdmin={isAdmin}
-        onToggleMute={toggleMute}
-        onLeave={handleLeave}
-        onMuteEveryone={handleMuteEveryone}
-        onKickParticipant={handleKickParticipant}
-      />
     </div>
   )
 }

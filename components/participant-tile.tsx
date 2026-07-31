@@ -10,7 +10,7 @@ function VoiceBars() {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="voice-bar h-3 w-0.5 rounded-full bg-primary-foreground"
+          className="voice-bar h-3 w-0.5 rounded-full bg-white"
           style={{ animationDelay: `${i * 0.15}s` }}
         />
       ))}
@@ -18,8 +18,15 @@ function VoiceBars() {
   )
 }
 
-export function ParticipantTile({ participant }: { participant: Participant }) {
-  const { name, avatar, isAdmin, isSpeaking, isMuted, isSelf } = participant
+export function ParticipantTile({
+  participant,
+}: {
+  participant: Participant & { reaction?: string }
+}) {
+  const { name, isAdmin, isSpeaking, isMuted, isSelf, id, reaction } = participant
+
+  // Generate unique Dicebear adventurer avatar using user's name/ID as seed
+  const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(id || name)}`
 
   return (
     <div className="flex flex-col items-center gap-3 text-center">
@@ -28,14 +35,14 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
           className={cn(
             'relative rounded-full p-[3px] transition-shadow duration-300',
             isSpeaking
-              ? 'speaker-ring'
-              : 'ring-1 ring-border ring-inset',
+              ? 'ring-2 ring-white ring-offset-2 ring-offset-black'
+              : 'ring-1 ring-zinc-800',
           )}
         >
-          <div className="size-16 overflow-hidden rounded-full bg-muted sm:size-20 md:size-24">
+          <div className="size-16 overflow-hidden rounded-full bg-zinc-900 border border-zinc-800 sm:size-20 md:size-24">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={avatar || '/placeholder.svg'}
+              src={avatarUrl}
               alt={`${name}'s avatar`}
               className="size-full object-cover"
               crossOrigin="anonymous"
@@ -43,9 +50,16 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
           </div>
         </div>
 
+        {/* Floating Emoji Reaction Overlay */}
+        {reaction && (
+          <span className="absolute -top-2 -right-2 animate-bounce text-2xl z-10 select-none bg-zinc-900 border border-zinc-850 p-1.5 rounded-full shadow-lg">
+            {reaction}
+          </span>
+        )}
+
         {/* Speaking indicator badge */}
         {isSpeaking && (
-          <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 items-center justify-center rounded-full bg-primary px-2 py-1 shadow-lg">
+          <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 items-center justify-center rounded-full bg-zinc-900 border border-zinc-700 px-2 py-1 shadow-lg">
             <VoiceBars />
             <span className="sr-only">Speaking</span>
           </span>
@@ -53,7 +67,7 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
 
         {/* Muted indicator badge */}
         {!isSpeaking && isMuted && (
-          <span className="absolute -bottom-1 right-0 flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-md sm:size-7">
+          <span className="absolute -bottom-1 right-0 flex size-6 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-550 shadow-md sm:size-7">
             <MicOff className="size-3.5" />
             <span className="sr-only">Muted</span>
           </span>
@@ -62,15 +76,15 @@ export function ParticipantTile({ participant }: { participant: Participant }) {
 
       <div className="flex max-w-[7rem] flex-col items-center gap-1">
         <div className="flex items-center gap-1">
-          <span className="truncate text-sm font-medium text-foreground">
+          <span className="truncate text-sm font-medium text-zinc-300">
             {isSelf ? 'You' : name}
           </span>
           {isAdmin && (
             <span
-              className="flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary"
+              className="flex items-center gap-1 rounded bg-zinc-800 border border-zinc-700 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-300"
               title="Room admin"
             >
-              <Crown className="size-3" />
+              <Crown className="size-2.5" />
               <span className="sr-only sm:not-sr-only">Admin</span>
             </span>
           )}

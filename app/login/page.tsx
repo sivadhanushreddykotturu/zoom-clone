@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, KeyRound, ArrowRight, Video, ShieldCheck, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Mail, KeyRound, ArrowRight, Video, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -77,16 +77,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-zinc-950 px-4 text-zinc-100">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.25),rgba(255,255,255,0))]" />
-      
-      <div className="relative z-10 w-full max-w-md space-y-8 rounded-3xl border border-zinc-800 bg-zinc-900/80 p-8 backdrop-blur-xl shadow-2xl shadow-indigo-500/10">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-black px-4 text-zinc-100">
+      <div className="w-full max-w-md space-y-8 rounded-2xl border border-zinc-800 bg-zinc-900 p-8 shadow-xl">
         <div className="text-center">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
-            <Video className="size-7" />
+          <div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-800 text-white">
+            <Video className="size-6" />
           </div>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Welcome to ZoomClone
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-white">
+            Sign In
           </h1>
           <p className="mt-2 text-sm text-zinc-400">
             Secure domain-restricted video conferencing
@@ -94,14 +92,14 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="flex items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-400">
+          <div className="flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-sm text-red-400">
             <AlertCircle className="size-5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {info && (
-          <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-400">
+          <div className="flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950 p-4 text-sm text-emerald-400">
             <CheckCircle2 className="size-5 shrink-0" />
             <span>{info}</span>
           </div>
@@ -111,7 +109,7 @@ export default function LoginPage() {
           <form onSubmit={handleSendOtp} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-                Your Email Address
+                Email Address
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-zinc-500" />
@@ -121,11 +119,11 @@ export default function LoginPage() {
                   placeholder="name@organization.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-950/80 py-3 pl-11 pr-4 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-xl border border-zinc-800 bg-black py-3 pl-11 pr-4 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-white focus:ring-1 focus:ring-white"
                 />
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                Supports organization domains like @kluniversity.com, @gmail.com, etc.
+                Support domains like @kluniversity.com, @gmail.com, etc.
               </p>
             </div>
 
@@ -138,21 +136,21 @@ export default function LoginPage() {
                 placeholder="e.g. Alex Morgan"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-2xl border border-zinc-800 bg-zinc-950/80 py-3 px-4 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full rounded-xl border border-zinc-800 bg-black py-3 px-4 text-sm text-white placeholder-zinc-500 outline-none transition focus:border-white focus:ring-1 focus:ring-white"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="group relative flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3.5 font-medium text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-500 disabled:opacity-50"
+              className="group relative flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3.5 font-semibold text-black transition hover:bg-zinc-200 disabled:opacity-50"
             >
               {loading ? (
                 <span>Sending Code...</span>
               ) : (
                 <>
-                  <span>Send Login Code</span>
-                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+                  <span>Send Code</span>
+                  <ArrowRight className="size-4" />
                 </>
               )}
             </button>
@@ -167,7 +165,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setStep('email')}
-                  className="text-xs text-indigo-400 hover:underline"
+                  className="text-xs text-zinc-400 hover:text-white hover:underline"
                 >
                   Change Email
                 </button>
@@ -181,27 +179,27 @@ export default function LoginPage() {
                   placeholder="123456"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-950/80 py-3 pl-11 pr-4 text-center font-mono text-lg tracking-widest text-white placeholder-zinc-600 outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-xl border border-zinc-800 bg-black py-3 pl-11 pr-4 text-center font-mono text-lg tracking-widest text-white placeholder-zinc-600 outline-none transition focus:border-white focus:ring-1 focus:ring-white"
                 />
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                Check your inbox at <span className="text-zinc-300">{email}</span> for the 6-digit code.
+                Check your inbox at <span className="text-zinc-300">{email}</span>.
               </p>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3.5 font-medium text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-500 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3.5 font-semibold text-black transition hover:bg-zinc-200 disabled:opacity-50"
             >
-              {loading ? 'Verifying...' : 'Verify Code & Sign In'}
+              {loading ? 'Verifying...' : 'Verify & Sign In'}
             </button>
           </form>
         )}
 
-        <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
-          <ShieldCheck className="size-4 text-indigo-400" />
-          <span>Protected by Brevo Transactional Email Auth & MongoDB</span>
+        <div className="flex items-center justify-center gap-2 text-xs text-zinc-500 border-t border-zinc-800 pt-4">
+          <ShieldCheck className="size-4" />
+          <span>Security by Brevo &amp; MongoDB</span>
         </div>
       </div>
     </div>

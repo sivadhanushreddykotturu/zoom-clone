@@ -71,3 +71,35 @@ export async function PATCH(
     return NextResponse.json({ error: error.message || 'Failed to update moderators' }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ meetingId: string }> }
+) {
+  try {
+    const session = await getSession()
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { meetingId } = await params
+    await connectDB()
+
+    const meeting = await Meeting.findOne({ meetingId })
+    if (!meeting) {
+      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 })
+    }
+
+    // Only host can delete the meeting
+    if (meeting.hostEmail !== session.email.toLowerCase()) {
+      return NextResponse.json({ error: 'Only the meeting host can delete this meeting' }, { status: 403 })
+    }
+
+    await Meeting.deleteOne({ meetingId })
+
+    return NextResponse.json({ success: true, message: 'Meeting deleted successfully' })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to delete meeting' }, { status: 500 })
+  }
+}
+
