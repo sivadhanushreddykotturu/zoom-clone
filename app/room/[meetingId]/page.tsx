@@ -1178,8 +1178,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
               </div>
 
               {/* Participants — compact sidebar on desktop, horizontal scroll on mobile */}
-              <div className="w-full sm:w-44 md:w-52 shrink-0 overflow-y-auto sm:max-h-[55vh] hide-scrollbar p-2">
-                <ul className="grid grid-cols-3 sm:grid-cols-2 justify-items-center gap-x-4 gap-y-6 sm:gap-y-6 pt-6 pb-4 px-1">
+              <div className="w-full sm:w-44 md:w-52 shrink-0 overflow-y-auto sm:max-h-[55vh] hide-scrollbar p-1">
+                <ul className="grid grid-cols-3 sm:grid-cols-2 justify-items-center gap-x-2 gap-y-7 sm:gap-y-7 pt-10 pb-4 px-1">
                   {participantsWithReactions.map((participant) => (
                     <li
                       key={participant.id}
@@ -1189,12 +1189,12 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                         setActiveMenuId(activeMenuId === participant.id ? null : participant.id)
                       }}
                     >
-                      <ParticipantTile participant={participant} />
+                      <ParticipantTile participant={participant} compact />
                       
-                      {/* Admin Actions Panel (Hover on desktop, click on mobile) */}
+                      {/* Admin Actions Panel (Vertical stack for narrow sidebar) */}
                       {isMod && !participant.isSelf && (
                         <div className={cn(
-                          "absolute -top-4 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-700 p-1 rounded-lg shadow-2xl z-30 whitespace-nowrap",
+                          "absolute -top-3 left-1/2 -translate-x-1/2 flex-col items-center gap-1 bg-zinc-950/95 border border-zinc-700 p-1.5 rounded-xl shadow-2xl z-30 w-max max-w-[120px]",
                           activeMenuId === participant.id ? "flex" : "hidden group-hover:flex"
                         )}>
                           {participant.isMuted ? (
@@ -1203,7 +1203,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                                 e.stopPropagation()
                                 handleUnmuteRequest(participant.id)
                               }}
-                              className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-white flex items-center gap-1"
+                              className="admin-option-btn w-full text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-white flex items-center justify-center gap-1"
                               title="Request Unmute"
                             >
                               <Mic className="size-3" /> Unmute
@@ -1214,7 +1214,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                                 e.stopPropagation()
                                 handleMuteTarget(participant.id)
                               }}
-                              className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-red-400 flex items-center gap-1"
+                              className="admin-option-btn w-full text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-red-400 flex items-center justify-center gap-1"
                               title="Mute"
                             >
                               <VolumeX className="size-3" /> Mute
@@ -1227,7 +1227,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                                 e.stopPropagation()
                                 handlePromoteCohost(participant.id, participant.name)
                               }}
-                              className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
+                              className="admin-option-btn w-full text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center justify-center gap-1"
                               title="Promote to Co-host"
                             >
                               <Shield className="size-3" /> Co-host
@@ -1241,7 +1241,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
               </div>
             </div>
           ) : (
-            <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6 pt-6 pb-4 px-2">
+            <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6 pt-10 pb-4 px-2">
               {participantsWithReactions.map((participant) => (
                 <li
                   key={participant.id}
@@ -1256,7 +1256,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                   {/* Admin Actions Panel (Hover on desktop, click on mobile) */}
                   {isMod && !participant.isSelf && (
                     <div className={cn(
-                      "absolute -top-4 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-700 p-1 rounded-lg shadow-2xl z-30 whitespace-nowrap",
+                      "absolute -top-4 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-950/95 border border-zinc-700 p-1 rounded-lg shadow-2xl z-30 whitespace-nowrap",
                       activeMenuId === participant.id ? "flex" : "hidden group-hover:flex"
                     )}>
                       {participant.isMuted ? (

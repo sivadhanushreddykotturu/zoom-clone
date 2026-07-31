@@ -20,8 +20,10 @@ function VoiceBars() {
 
 export function ParticipantTile({
   participant,
+  compact,
 }: {
   participant: Participant & { reaction?: string; isAway?: boolean }
+  compact?: boolean
 }) {
   const { name, isAdmin, isSpeaking, isMuted, isSelf, id, reaction, isAway } = participant
 
@@ -29,7 +31,7 @@ export function ParticipantTile({
   const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(id || name)}`
 
   return (
-    <div className={cn("flex flex-col items-center gap-3 text-center transition-opacity duration-300", isAway && "opacity-40")}>
+    <div className={cn("flex flex-col items-center gap-2 text-center transition-opacity duration-300", isAway && "opacity-40")}>
       <div className="relative p-1">
         <div
           className={cn(
@@ -39,7 +41,10 @@ export function ParticipantTile({
               : 'ring-1 ring-zinc-800',
           )}
         >
-          <div className="size-16 overflow-hidden rounded-full bg-zinc-900 border border-zinc-800 sm:size-20 md:size-24">
+          <div className={cn(
+            "overflow-hidden rounded-full bg-zinc-900 border border-zinc-800 transition-all",
+            compact ? "size-12 sm:size-14" : "size-14 sm:size-18 md:size-20"
+          )}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={avatarUrl}
