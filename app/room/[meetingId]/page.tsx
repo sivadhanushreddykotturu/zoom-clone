@@ -1133,7 +1133,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         <RoomHeader participantCount={participants.length} meetingId={meetingId} title={meetingTitle} />
 
         <main className={cn(
-          "mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 overflow-y-auto pb-28",
+          "mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 overflow-y-auto overflow-x-hidden pb-28 hide-scrollbar",
           currentScreenSharer ? "py-4 sm:py-5" : "py-8 sm:py-10"
         )}>
           
@@ -1178,7 +1178,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
               </div>
 
               {/* Participants — compact sidebar on desktop, horizontal scroll on mobile */}
-              <div className="w-full sm:w-44 md:w-52 shrink-0 overflow-y-auto sm:max-h-[55vh]">
+              <div className="w-full sm:w-44 md:w-52 shrink-0 overflow-y-auto overflow-x-hidden sm:max-h-[55vh] hide-scrollbar">
                 <ul className="grid grid-cols-3 sm:grid-cols-2 justify-items-center gap-x-4 gap-y-5 sm:gap-y-4">
                   {participantsWithReactions.map((participant) => (
                     <li
@@ -1348,7 +1348,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             </button>
           </div>
 
-          <div className="flex-1 p-4 overflow-y-auto space-y-3.5">
+          <div className="flex-1 p-4 overflow-y-auto space-y-3.5 scrollbar-thin">
             {chatMessages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-center px-4">
                 <p className="text-xs">No messages yet.</p>
@@ -1399,7 +1399,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             </button>
           </div>
 
-          <div className="flex-1 p-4 overflow-y-auto space-y-3.5">
+          <div className="flex-1 p-4 overflow-y-auto space-y-3.5 scrollbar-thin">
             {lobbyList.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-center px-4">
                 <p className="text-xs">Waiting room is empty.</p>
