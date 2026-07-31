@@ -1178,12 +1178,12 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
               </div>
 
               {/* Participants — compact sidebar on desktop, horizontal scroll on mobile */}
-              <div className="w-full sm:w-44 md:w-52 shrink-0 overflow-y-auto overflow-x-hidden sm:max-h-[55vh] hide-scrollbar">
-                <ul className="grid grid-cols-3 sm:grid-cols-2 justify-items-center gap-x-4 gap-y-5 sm:gap-y-4">
+              <div className="w-full sm:w-44 md:w-52 shrink-0 overflow-y-auto sm:max-h-[55vh] hide-scrollbar p-2">
+                <ul className="grid grid-cols-3 sm:grid-cols-2 justify-items-center gap-x-4 gap-y-6 sm:gap-y-6 pt-6 pb-4 px-1">
                   {participantsWithReactions.map((participant) => (
                     <li
                       key={participant.id}
-                      className="relative group cursor-pointer"
+                      className="relative group cursor-pointer hover:z-30"
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest('.admin-option-btn')) return
                         setActiveMenuId(activeMenuId === participant.id ? null : participant.id)
@@ -1194,7 +1194,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                       {/* Admin Actions Panel (Hover on desktop, click on mobile) */}
                       {isMod && !participant.isSelf && (
                         <div className={cn(
-                          "absolute -top-3 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-805 p-1 rounded-lg shadow-xl z-20",
+                          "absolute -top-4 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-700 p-1 rounded-lg shadow-2xl z-30 whitespace-nowrap",
                           activeMenuId === participant.id ? "flex" : "hidden group-hover:flex"
                         )}>
                           {participant.isMuted ? (
@@ -1241,11 +1241,11 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
               </div>
             </div>
           ) : (
-            <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
+            <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6 pt-6 pb-4 px-2">
               {participantsWithReactions.map((participant) => (
                 <li
                   key={participant.id}
-                  className="relative group cursor-pointer"
+                  className="relative group cursor-pointer hover:z-30"
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest('.admin-option-btn')) return
                     setActiveMenuId(activeMenuId === participant.id ? null : participant.id)
@@ -1256,7 +1256,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                   {/* Admin Actions Panel (Hover on desktop, click on mobile) */}
                   {isMod && !participant.isSelf && (
                     <div className={cn(
-                      "absolute -top-3 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-805 p-1 rounded-lg shadow-xl z-20",
+                      "absolute -top-4 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-700 p-1 rounded-lg shadow-2xl z-30 whitespace-nowrap",
                       activeMenuId === participant.id ? "flex" : "hidden group-hover:flex"
                     )}>
                       {participant.isMuted ? (

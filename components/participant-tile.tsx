@@ -30,7 +30,7 @@ export function ParticipantTile({
 
   return (
     <div className={cn("flex flex-col items-center gap-3 text-center transition-opacity duration-300", isAway && "opacity-40")}>
-      <div className="relative">
+      <div className="relative p-1">
         <div
           className={cn(
             'relative rounded-full p-[3px] transition-shadow duration-300',
