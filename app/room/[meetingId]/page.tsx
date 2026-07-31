@@ -1132,7 +1132,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       <div className="flex flex-1 flex-col h-dvh">
         <RoomHeader participantCount={participants.length} meetingId={meetingId} title={meetingTitle} />
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 sm:py-10 overflow-y-auto pb-28">
+        <main className={cn(
+          "mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 overflow-y-auto pb-28",
+          currentScreenSharer ? "py-4 sm:py-5" : "py-8 sm:py-10"
+        )}>
           
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1162,74 +1165,142 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           </div>
 
           {/* Active Screenshare Video Render Frame */}
-          {currentScreenSharer && (
-            <div className="mb-8 w-full aspect-video rounded-xl bg-black border border-zinc-800 overflow-hidden relative flex flex-col justify-end shadow-xl">
-              <ScreenshareVideo room={roomRef.current} participantIdentity={currentScreenSharer} />
-              <div className="absolute bottom-4 left-4 bg-black border border-zinc-800 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-300 shadow-md font-mono">
-                {currentScreenSharer === selfIdentity ? "Your Screen" : `${participants.find(p => p.id === currentScreenSharer)?.name || currentScreenSharer}'s Screen`}
+          {currentScreenSharer ? (
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 flex-1 min-h-0">
+              {/* Screenshare Video — takes primary space */}
+              <div className="w-full sm:flex-1 min-w-0">
+                <div className="w-full max-h-[40vh] sm:max-h-[55vh] rounded-xl bg-black border border-zinc-800 overflow-hidden relative shadow-xl">
+                  <ScreenshareVideo room={roomRef.current} participantIdentity={currentScreenSharer} />
+                  <div className="absolute bottom-3 left-3 bg-black/80 border border-zinc-800 px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-300 shadow-md font-mono backdrop-blur-sm">
+                    {currentScreenSharer === selfIdentity ? "Your Screen" : `${participants.find(p => p.id === currentScreenSharer)?.name || currentScreenSharer}'s Screen`}
+                  </div>
+                </div>
+              </div>
+
+              {/* Participants — compact sidebar on desktop, horizontal scroll on mobile */}
+              <div className="w-full sm:w-44 md:w-52 shrink-0 overflow-y-auto sm:max-h-[55vh]">
+                <ul className="grid grid-cols-3 sm:grid-cols-2 justify-items-center gap-x-4 gap-y-5 sm:gap-y-4">
+                  {participantsWithReactions.map((participant) => (
+                    <li
+                      key={participant.id}
+                      className="relative group cursor-pointer"
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest('.admin-option-btn')) return
+                        setActiveMenuId(activeMenuId === participant.id ? null : participant.id)
+                      }}
+                    >
+                      <ParticipantTile participant={participant} />
+                      
+                      {/* Admin Actions Panel (Hover on desktop, click on mobile) */}
+                      {isMod && !participant.isSelf && (
+                        <div className={cn(
+                          "absolute -top-3 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-805 p-1 rounded-lg shadow-xl z-20",
+                          activeMenuId === participant.id ? "flex" : "hidden group-hover:flex"
+                        )}>
+                          {participant.isMuted ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleUnmuteRequest(participant.id)
+                              }}
+                              className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-white flex items-center gap-1"
+                              title="Request Unmute"
+                            >
+                              <Mic className="size-3" /> Unmute
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleMuteTarget(participant.id)
+                              }}
+                              className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-red-400 flex items-center gap-1"
+                              title="Mute"
+                            >
+                              <VolumeX className="size-3" /> Mute
+                            </button>
+                          )}
+                          
+                          {!participant.isAdmin && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handlePromoteCohost(participant.id, participant.name)
+                              }}
+                              className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
+                              title="Promote to Co-host"
+                            >
+                              <Shield className="size-3" /> Co-host
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
+          ) : (
+            <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
+              {participantsWithReactions.map((participant) => (
+                <li
+                  key={participant.id}
+                  className="relative group cursor-pointer"
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest('.admin-option-btn')) return
+                    setActiveMenuId(activeMenuId === participant.id ? null : participant.id)
+                  }}
+                >
+                  <ParticipantTile participant={participant} />
+                  
+                  {/* Admin Actions Panel (Hover on desktop, click on mobile) */}
+                  {isMod && !participant.isSelf && (
+                    <div className={cn(
+                      "absolute -top-3 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-805 p-1 rounded-lg shadow-xl z-20",
+                      activeMenuId === participant.id ? "flex" : "hidden group-hover:flex"
+                    )}>
+                      {participant.isMuted ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleUnmuteRequest(participant.id)
+                          }}
+                          className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-white flex items-center gap-1"
+                          title="Request Unmute"
+                        >
+                          <Mic className="size-3" /> Unmute
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleMuteTarget(participant.id)
+                          }}
+                          className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-red-400 flex items-center gap-1"
+                          title="Mute"
+                        >
+                          <VolumeX className="size-3" /> Mute
+                        </button>
+                      )}
+                      
+                      {!participant.isAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handlePromoteCohost(participant.id, participant.name)
+                          }}
+                          className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
+                          title="Promote to Co-host"
+                        >
+                          <Shield className="size-3" /> Co-host
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
-
-          <ul className="grid grid-cols-3 justify-items-center gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-y-10 md:grid-cols-5 lg:grid-cols-6">
-            {participantsWithReactions.map((participant) => (
-              <li
-                key={participant.id}
-                className="relative group cursor-pointer"
-                onClick={(e) => {
-                  if ((e.target as HTMLElement).closest('.admin-option-btn')) return
-                  setActiveMenuId(activeMenuId === participant.id ? null : participant.id)
-                }}
-              >
-                <ParticipantTile participant={participant} />
-                
-                {/* Admin Actions Panel (Hover on desktop, click on mobile) */}
-                {isMod && !participant.isSelf && (
-                  <div className={cn(
-                    "absolute -top-3 left-1/2 -translate-x-1/2 items-center gap-1 bg-zinc-900 border border-zinc-805 p-1 rounded-lg shadow-xl z-20",
-                    activeMenuId === participant.id ? "flex" : "hidden group-hover:flex"
-                  )}>
-                    {participant.isMuted ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleUnmuteRequest(participant.id)
-                        }}
-                        className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-white flex items-center gap-1"
-                        title="Request Unmute"
-                      >
-                        <Mic className="size-3" /> Unmute
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleMuteTarget(participant.id)
-                        }}
-                        className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-red-400 flex items-center gap-1"
-                        title="Mute"
-                      >
-                        <VolumeX className="size-3" /> Mute
-                      </button>
-                    )}
-                    
-                    {!participant.isAdmin && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handlePromoteCohost(participant.id, participant.name)
-                        }}
-                        className="admin-option-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 px-2 py-1 rounded text-zinc-300 flex items-center gap-1"
-                        title="Promote to Co-host"
-                      >
-                        <Shield className="size-3" /> Co-host
-                      </button>
-                    )}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
         </main>
 
         {toast && (
