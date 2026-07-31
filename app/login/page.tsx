@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Mail, KeyRound, ArrowRight, Video, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Footer } from '@/components/footer'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -201,6 +202,9 @@ export default function LoginPage() {
           <ShieldCheck className="size-4" />
           <span>Security by Brevo &amp; MongoDB</span>
         </div>
+      </div>
+      <div className="mt-4">
+        <Footer />
       </div>
     </div>
   )

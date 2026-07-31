@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Video, Plus, LogOut, ArrowRight, ShieldCheck, Copy, Check, Calendar, Trash2 } from 'lucide-react'
+import { Footer } from '@/components/footer'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -258,6 +259,7 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+      <Footer />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Video, ShieldAlert, Users, Globe, Plus, Copy, Check } from 'lucide-react'
+import { Footer } from '@/components/footer'
 
 export default function CreateMeetingPage() {
   const router = useRouter()
@@ -210,6 +211,7 @@ export default function CreateMeetingPage() {
           )}
         </div>
       </div>
+      <Footer />
     </div>
   )
 }
