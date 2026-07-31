@@ -262,12 +262,18 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             setIsScreenSharing(false)
             showToast('Host stopped your screenshare.')
           }
+        } else if (message.type === 'end-meeting-signal') {
+          showToast('The host has ended this meeting.')
+          if (roomRef.current) {
+            roomRef.current.disconnect()
+          }
+          router.push('/dashboard')
         }
       } catch (e) {
         console.error('Error parsing data channel message:', e)
       }
     },
-    [selfIdentity, rebuildParticipants, showToast, moderators, currentScreenSharer, isScreenSharing],
+    [selfIdentity, rebuildParticipants, showToast, moderators, currentScreenSharer, isScreenSharing, router],
   )
 
   // Start connect flow
@@ -407,10 +413,53 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     )
   }, [])
 
+  // Check if there are other active co-hosts present in the meeting
+  const hasActiveCohost = useMemo(() => {
+    return participants.some(
+      (p) => !p.isSelf && moderators.includes(p.id)
+    )
+  }, [participants, moderators])
+
+  const [showEndMeetingPrompt, setShowEndMeetingPrompt] = useState(false)
+
+  const handleEndMeeting = useCallback(async () => {
+    const room = roomRef.current
+    if (room) {
+      const textEncoder = new TextEncoder()
+      const payload = textEncoder.encode(JSON.stringify({ type: 'end-meeting-signal' }))
+      try {
+        room.localParticipant.publishData(payload, { reliable: true })
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
+    try {
+      await fetch(`/api/meetings/${meetingId}`, {
+        method: 'DELETE',
+      })
+    } catch (err) {
+      console.error(err)
+    }
+
+    if (room) {
+      room.disconnect()
+    }
+    router.push('/dashboard')
+  }, [meetingId, router])
+
   const handleLeave = useCallback(async () => {
+    const isHost = selfIdentity.toLowerCase() === moderators[0]?.toLowerCase() // host is the first moderator who created the meeting
+
+    if (isHost && !hasActiveCohost) {
+      // If host is leaving and there are no active co-hosts, show ending meeting warning prompt
+      setShowEndMeetingPrompt(true)
+      return
+    }
+
     await roomRef.current?.disconnect()
     router.push('/dashboard')
-  }, [router])
+  }, [router, selfIdentity, moderators, hasActiveCohost])
 
   // Moderate Waiting Room (Allow / Discard)
   const handleLobbyAction = useCallback(async (targetEmail: string, action: 'approve' | 'deny') => {
@@ -886,6 +935,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             onToggleChat={() => setIsChatOpen(!isChatOpen)}
             isChatOpen={isChatOpen}
             unreadChats={unreadCount}
+            isHost={selfIdentity.toLowerCase() === moderators[0]?.toLowerCase()}
+            onEndMeeting={() => setShowEndMeetingPrompt(true)}
           />
           
           {/* Custom Screenshare Trigger floating on top of control bar */}
@@ -1048,7 +1099,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             </div>
             <div>
               <h3 className="font-bold text-white text-lg">Unmute Microphone</h3>
-              <p className="text-sm text-zinc-400 mt-1">
+              <p className="text-sm text-zinc-450 mt-1">
                 The host has requested that you unmute your microphone.
               </p>
             </div>
@@ -1067,6 +1118,39 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
                 className="flex-1 rounded-xl bg-white py-2.5 text-xs font-bold text-black hover:bg-zinc-250 transition"
               >
                 Unmute Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* End Meeting Alert Confirmation Dialog */}
+      {showEndMeetingPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl text-center space-y-4">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-red-950 border border-red-900 text-red-400">
+              <AlertTriangle className="size-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-lg">End Meeting for Everyone?</h3>
+              <p className="text-sm text-zinc-400 mt-1">
+                {hasActiveCohost
+                  ? "Are you sure you want to end this meeting for all participants?"
+                  : "There are no active co-hosts in this meeting. Leaving will end the meeting for all participants."}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={handleEndMeeting}
+                className="w-full rounded-xl bg-red-650 hover:bg-red-650/80 py-2.5 text-xs font-bold text-white transition"
+              >
+                End Meeting for Everyone
+              </button>
+              <button
+                onClick={() => setShowEndMeetingPrompt(false)}
+                className="w-full rounded-xl bg-zinc-800 border border-zinc-700 py-2.5 text-xs font-semibold text-zinc-350 hover:bg-zinc-750 transition"
+              >
+                Cancel
               </button>
             </div>
           </div>

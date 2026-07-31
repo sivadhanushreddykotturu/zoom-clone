@@ -16,6 +16,8 @@ type ControlBarProps = {
   onToggleChat: () => void
   isChatOpen: boolean
   unreadChats?: number
+  isHost?: boolean
+  onEndMeeting?: () => void
 }
 
 const EMOJIS = ['👍', '✋', '❤️', '👏', '😂']
@@ -31,6 +33,8 @@ export function ControlBar({
   onToggleChat,
   isChatOpen,
   unreadChats = 0,
+  isHost = false,
+  onEndMeeting,
 }: ControlBarProps) {
   const [showEmojiMenu, setShowEmojiMenu] = useState(false)
 
@@ -128,6 +132,18 @@ export function ControlBar({
           <LogOut className="size-4" />
           Leave
         </button>
+
+        {/* End Meeting button for hosts */}
+        {isHost && onEndMeeting && (
+          <button
+            type="button"
+            onClick={onEndMeeting}
+            className="flex items-center gap-2 rounded-full border border-red-800 bg-red-950/20 hover:bg-red-950/40 px-6 py-3 text-sm font-semibold text-red-400 transition-colors"
+          >
+            <ShieldAlert className="size-4 text-red-500" />
+            End
+          </button>
+        )}
 
         {/* Admin actions (Simplified list, co-hosts/admins menu) */}
         {isAdmin && (
