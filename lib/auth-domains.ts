@@ -18,7 +18,8 @@ export const ALLOWED_REGISTRATION_DOMAINS: string[] = [
  * To restrict meeting creation to specific emails (to conserve LiveKit credits),
  * add authorized host email addresses to the ALLOWED_MEETING_CREATORS array below.
  * 
- * If this array is empty or contains '*', anyone can create meetings.
+ * Note: Emails explicitly listed here are ALWAYS allowed to log in (bypass domain restriction)
+ * and create meetings.
  */
 export const ALLOWED_MEETING_CREATORS: string[] = [
   'sivadhanushkotturu@gmail.com',
@@ -27,15 +28,23 @@ export const ALLOWED_MEETING_CREATORS: string[] = [
 ]
 
 /**
- * Validates if a user's email domain is allowed to register/log in.
+ * Validates if a user's email is allowed to register/log in.
+ * - Authorized meeting creators (e.g. sivadhanushkotturu@gmail.com) are ALWAYS allowed.
+ * - Other users must match ALLOWED_REGISTRATION_DOMAINS (e.g. @kluniversity.in).
  */
 export function isEmailDomainAllowed(email: string): boolean {
+  const cleanEmail = email.trim().toLowerCase()
+
+  // 1. Authorized hosts/creators are always allowed to log in
+  if (ALLOWED_MEETING_CREATORS.some((creator) => creator.trim().toLowerCase() === cleanEmail)) {
+    return true
+  }
+
   if (!ALLOWED_REGISTRATION_DOMAINS || ALLOWED_REGISTRATION_DOMAINS.length === 0) {
     return true
   }
 
-  const cleanEmail = email.trim().toLowerCase()
-
+  // 2. Validate against general allowed registration domains
   return ALLOWED_REGISTRATION_DOMAINS.some((domain) => {
     const cleanDomain = domain.trim().toLowerCase()
     if (cleanDomain === '*') return true
