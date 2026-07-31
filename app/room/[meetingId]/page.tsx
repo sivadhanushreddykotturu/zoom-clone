@@ -169,6 +169,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   const [screenshareCooldown, setScreenshareCooldown] = useState(false)
   const [meetingTitle, setMeetingTitle] = useState('')
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
 
   // Host unmute request popup state
   const [showUnmuteRequest, setShowUnmuteRequest] = useState(false)
@@ -213,6 +214,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     const t = setTimeout(() => setToast(null), 2600)
     return () => clearTimeout(t)
   }, [toast])
+
+  useEffect(() => {
+    setIsMobile(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent))
+  }, [])
 
   // Build UI participants list
   const rebuildParticipants = useCallback(() => {
