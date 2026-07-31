@@ -330,6 +330,17 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         setModerators(mods)
         setLobbyStatus('approved')
 
+        // Mock Bypass: If using mock tokens (e.g. no active LiveKit keys configured), bypass real connection
+        if (token.startsWith('mock_livekit_token_')) {
+          setConnected(true)
+          setLoading(false)
+          setParticipants([
+            { id: identity, name: name + ' (You)', avatar: '', isAdmin: mods.includes(identity), isSpeaking: false, isMuted: true, isSelf: true },
+            { id: 'alex@domain.com', name: 'Alex Okafor', avatar: '', isAdmin: false, isSpeaking: false, isMuted: true }
+          ])
+          return
+        }
+
         const livekitRoom = new Room()
         roomRef.current = livekitRoom
 
