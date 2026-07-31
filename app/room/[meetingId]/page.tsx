@@ -170,6 +170,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
   // Host unmute request popup state
   const [showUnmuteRequest, setShowUnmuteRequest] = useState(false)
+  const [isMuteLocked, setIsMuteLocked] = useState(false)
 
   // End Meeting Alert Confirmation Dialog
   const [showEndMeetingPrompt, setShowEndMeetingPrompt] = useState(false)
@@ -279,7 +280,28 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         }, 3000)
       } else if (message.type === 'unmute-request') {
         if (message.target === selfIdentityRef.current) {
+          setIsMuteLocked(false) // Unlock unmuting!
           setShowUnmuteRequest(true)
+        }
+      } else if (message.type === 'mute-lock') {
+        const isMod = moderatorsRef.current.includes(selfIdentityRef.current)
+        if (message.target === selfIdentityRef.current && !isMod) {
+          setIsMuteLocked(true)
+          if (roomRef.current && roomRef.current.localParticipant.isMicrophoneEnabled) {
+            roomRef.current.localParticipant.setMicrophoneEnabled(false)
+            rebuildParticipantsRef.current()
+          }
+          showToast('You have been muted by the host.')
+        }
+      } else if (message.type === 'mute-lock-all') {
+        const isMod = moderatorsRef.current.includes(selfIdentityRef.current)
+        if (!isMod) {
+          setIsMuteLocked(true)
+          if (roomRef.current && roomRef.current.localParticipant.isMicrophoneEnabled) {
+            roomRef.current.localParticipant.setMicrophoneEnabled(false)
+            rebuildParticipantsRef.current()
+          }
+          showToast('The host has muted everyone.')
         }
       } else if (message.type === 'cohost-promoted') {
         setModerators((prev) => {
@@ -528,6 +550,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   )
 
   const toggleMute = useCallback(async () => {
+    if (isMuteLocked) {
+      showToast('Muted by host. You can only unmute when requested.')
+      return
+    }
     const room = roomRef.current
     if (!room) return
     const enabled = room.localParticipant.isMicrophoneEnabled
@@ -537,7 +563,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         p.isSelf ? { ...p, isMuted: enabled, isSpeaking: false } : p,
       ),
     )
-  }, [])
+  }, [isMuteLocked, showToast])
 
 
 
@@ -570,6 +596,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+
+      // Broadcast mute-lock-all signal to all participants
+      const room = roomRef.current
+      if (room) {
+        const textEncoder = new TextEncoder()
+        const payload = textEncoder.encode(JSON.stringify({ type: 'mute-lock-all' }))
+        room.localParticipant.publishData(payload, { reliable: true })
+      }
+
       showToast('Everyone has been muted.')
     } catch (err: any) {
       showToast(err.message || 'Failed to mute everyone.')
@@ -627,6 +662,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         const data = await res.json()
         throw new Error(data.error)
       }
+
+      // Send mute-lock signal directly to the target participant
+      const room = roomRef.current
+      if (room) {
+        const textEncoder = new TextEncoder()
+        const payload = textEncoder.encode(JSON.stringify({ type: 'mute-lock', target: identity }))
+        room.localParticipant.publishData(payload, { reliable: true })
+      }
+
       showToast(`Muted ${identity}`)
     } catch (err: any) {
       showToast(err.message || 'Failed to mute participant.')
