@@ -25,6 +25,19 @@ interface ChatMessage {
   timestamp: number
 }
 
+function getTrackPublications(p: Participant | null | undefined): any[] {
+  if (!p) return []
+  const publications = p.trackPublications || (p as any).tracks
+  if (!publications) return []
+  if (typeof publications.values === 'function') {
+    return Array.from(publications.values())
+  }
+  if (typeof publications === 'object') {
+    return Object.values(publications)
+  }
+  return []
+}
+
 function toUiParticipant(
   p: Participant,
   selfIdentity: string,
@@ -37,13 +50,11 @@ function toUiParticipant(
 
   let isMuted = true
   let isSpeaking = p.isSpeaking ?? false
-  const publications = p.trackPublications || p.tracks
-  if (publications) {
-    for (const pub of publications.values()) {
-      if (pub.kind === Track.Kind.Audio) {
-        isMuted = pub.isMuted ?? true
-        break
-      }
+  const publications = getTrackPublications(p)
+  for (const pub of publications) {
+    if (pub.kind === Track.Kind.Audio) {
+      isMuted = pub.isMuted ?? true
+      break
     }
   }
 
@@ -74,10 +85,8 @@ function ScreenshareVideo({ room, participantIdentity }: { room: Room | null; pa
     let attachedTrack: any = null
 
     const attachTrack = () => {
-      const publications = targetParticipant.trackPublications || (targetParticipant as any).tracks
-      if (!publications) return
-
-      for (const pub of publications.values()) {
+      const publications = getTrackPublications(targetParticipant)
+      for (const pub of publications) {
         if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
           if (pub.track) {
             if (attachedTrack !== pub.track) {
@@ -585,7 +594,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       const targetUser = roomRef.current?.remoteParticipants.get(identity)
       if (!targetUser) return
       let trackSid = ''
-      for (const pub of targetUser.trackPublications.values()) {
+      const publications = getTrackPublications(targetUser)
+      for (const pub of publications) {
         if (pub.kind === Track.Kind.Audio) {
           trackSid = pub.trackSid
           break
