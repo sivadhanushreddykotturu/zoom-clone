@@ -16,6 +16,7 @@ import { ParticipantTile } from '@/components/participant-tile'
 import { ControlBar } from '@/components/control-bar'
 import type { Participant as UiParticipant } from '@/lib/room-data'
 import { Lock, MailCheck, ArrowLeft, Send, X, Shield, VolumeX, Mic, Monitor, UserCheck, AlertTriangle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
 interface ChatMessage {
