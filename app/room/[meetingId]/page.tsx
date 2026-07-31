@@ -1200,7 +1200,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
       {/* Real-time Chat sidebar Panel */}
       {isChatOpen && (
-        <div className="w-80 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0">
+        <div className="fixed sm:relative top-0 right-0 bottom-0 w-full sm:w-80 z-40 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0 shadow-2xl">
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
             <h3 className="font-bold text-white text-sm">Meeting Chat</h3>
             <button
@@ -1251,7 +1251,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
       {/* Waiting Room Queue Lobby sidebar Panel */}
       {isMod && isLobbyOpen && (
-        <div className="w-80 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0">
+        <div className="fixed sm:relative top-0 right-0 bottom-0 w-full sm:w-80 z-40 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0 shadow-2xl">
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
             <h3 className="font-bold text-white text-sm">Waiting Room Queue</h3>
             <button
