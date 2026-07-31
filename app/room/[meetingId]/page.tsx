@@ -85,25 +85,48 @@ function ScreenshareVideo({ room, participantIdentity }: { room: Room | null; pa
     let attachedTrack: any = null
 
     const attachTrack = () => {
-      const publications = getTrackPublications(targetParticipant)
-      for (const pub of publications) {
-        if (pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
-          if (pub.track) {
-            if (attachedTrack !== pub.track) {
-              if (attachedTrack) attachedTrack.detach(videoElement)
-              pub.track.attach(videoElement)
-              attachedTrack = pub.track
+      try {
+        const publications = getTrackPublications(targetParticipant)
+        for (const pub of publications) {
+          if (pub && pub.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+            if (pub.track) {
+              if (attachedTrack !== pub.track) {
+                if (attachedTrack) {
+                  try {
+                    attachedTrack.detach(videoElement)
+                  } catch (e) {
+                    console.warn('Failed to detach track:', e)
+                  }
+                }
+                try {
+                  pub.track.attach(videoElement)
+                } catch (e) {
+                  console.warn('Failed to attach track:', e)
+                }
+                attachedTrack = pub.track
+              }
+            } else if (typeof pub.on === 'function') {
+              pub.on('subscribed', (track: any) => {
+                if (attachedTrack) {
+                  try {
+                    attachedTrack.detach(videoElement)
+                  } catch (e) {
+                    console.warn('Failed to detach track:', e)
+                  }
+                }
+                try {
+                  track.attach(videoElement)
+                } catch (e) {
+                  console.warn('Failed to attach track:', e)
+                }
+                attachedTrack = track
+              })
             }
-          } else {
-            // Track is not yet subscribed, wait for it
-            pub.on('subscribed', (track: any) => {
-              if (attachedTrack) attachedTrack.detach(videoElement)
-              track.attach(videoElement)
-              attachedTrack = track
-            })
+            break
           }
-          break
         }
+      } catch (err) {
+        console.error('Error in screenshare attachTrack:', err)
       }
     }
 
@@ -113,12 +136,20 @@ function ScreenshareVideo({ room, participantIdentity }: { room: Room | null; pa
       attachTrack()
     }
     
-    targetParticipant.on('trackSubscribed', handleTrackSubscribed)
+    if (typeof targetParticipant.on === 'function') {
+      targetParticipant.on('trackSubscribed', handleTrackSubscribed)
+    }
 
     return () => {
-      targetParticipant.off('trackSubscribed', handleTrackSubscribed)
+      if (typeof targetParticipant.off === 'function') {
+        targetParticipant.off('trackSubscribed', handleTrackSubscribed)
+      }
       if (attachedTrack && videoElement) {
-        attachedTrack.detach(videoElement)
+        try {
+          attachedTrack.detach(videoElement)
+        } catch (e) {
+          console.warn('Failed to detach track in cleanup:', e)
+        }
       }
     }
   }, [room, participantIdentity])
@@ -556,13 +587,23 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           .on(RoomEvent.TrackPublished, refresh)
           .on(RoomEvent.TrackUnpublished, refresh)
           .on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-            if (track.kind === Track.Kind.Audio) {
-              track.attach()
+            if (track && track.kind === Track.Kind.Audio) {
+              try {
+                track.attach()
+              } catch (e) {
+                console.warn('Failed to attach remote audio track:', e)
+              }
             }
             refresh()
           })
           .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
-            track.detach()
+            if (track) {
+              try {
+                track.detach()
+              } catch (e) {
+                console.warn('Failed to detach remote audio track:', e)
+              }
+            }
             refresh()
           })
           .on(RoomEvent.DataReceived, (payload, participant) => {
