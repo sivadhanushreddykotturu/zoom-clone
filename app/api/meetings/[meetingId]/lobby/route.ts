@@ -113,11 +113,9 @@ export async function PATCH(
     const { meetingId } = await params
     const { targetEmail, action } = await req.json() // action: 'approve' | 'deny'
 
-    if (!targetEmail || !action) {
-      return NextResponse.json({ error: 'targetEmail and action are required' }, { status: 400 })
+    if (!action) {
+      return NextResponse.json({ error: 'action is required' }, { status: 400 })
     }
-
-    const cleanTargetEmail = targetEmail.trim().toLowerCase()
 
     await connectDB()
     const meeting = await Meeting.findOne({ meetingId })
@@ -133,6 +131,23 @@ export async function PATCH(
       return NextResponse.json({ error: 'Only hosts and moderators can approve/deny participants' }, { status: 403 })
     }
 
+    if (action === 'approve-all' || targetEmail === 'all') {
+      let count = 0
+      meeting.lobby.forEach((p) => {
+        if (p.status === 'pending') {
+          p.status = 'approved'
+          count++
+        }
+      })
+      await meeting.save()
+      return NextResponse.json({ success: true, count, status: 'approved' })
+    }
+
+    if (!targetEmail) {
+      return NextResponse.json({ error: 'targetEmail is required for single approval' }, { status: 400 })
+    }
+
+    const cleanTargetEmail = targetEmail.trim().toLowerCase()
     const participant = meeting.lobby.find((p) => p.email === cleanTargetEmail)
     if (!participant) {
       return NextResponse.json({ error: 'Lobby participant not found' }, { status: 404 })

@@ -709,6 +709,25 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }, [meetingId, fetchLobbyList, showToast])
 
+  // Approve all pending participants in Waiting Room
+  const handleApproveAllLobby = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/meetings/${meetingId}/lobby`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve-all' }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error)
+      }
+      showToast('All waiting participants allowed entry.')
+      fetchLobbyList()
+    } catch (err: any) {
+      showToast(err.message || 'Failed to approve all participants.')
+    }
+  }, [meetingId, fetchLobbyList, showToast])
+
   // Remote mute-all
   const handleMuteEveryone = useCallback(async () => {
     try {
@@ -1432,12 +1451,23 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         <div className="fixed sm:relative top-0 right-0 bottom-0 w-full sm:w-80 z-40 h-dvh border-l border-zinc-800 bg-zinc-950 flex flex-col justify-between shrink-0 shadow-2xl">
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
             <h3 className="font-bold text-white text-sm">Waiting Room Queue</h3>
-            <button
-              onClick={() => setIsLobbyOpen(false)}
-              className="text-zinc-500 hover:text-white"
-            >
-              <X className="size-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {lobbyList.length > 0 && (
+                <button
+                  onClick={handleApproveAllLobby}
+                  className="rounded bg-white px-2.5 py-1 text-xs font-bold text-black hover:bg-zinc-200 transition"
+                  title="Allow entry for all waiting participants"
+                >
+                  Admit All
+                </button>
+              )}
+              <button
+                onClick={() => setIsLobbyOpen(false)}
+                className="text-zinc-500 hover:text-white"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 p-4 overflow-y-auto space-y-3.5 scrollbar-thin">
