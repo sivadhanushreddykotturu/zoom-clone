@@ -279,13 +279,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           })
         }, 3000)
       } else if (message.type === 'unmute-request') {
-        if (message.target === selfIdentityRef.current) {
+        if (message.target.toLowerCase() === selfIdentityRef.current.toLowerCase()) {
           setIsMuteLocked(false) // Unlock unmuting!
           setShowUnmuteRequest(true)
         }
       } else if (message.type === 'mute-lock') {
-        const isMod = moderatorsRef.current.includes(selfIdentityRef.current)
-        if (message.target === selfIdentityRef.current && !isMod) {
+        const isMod = moderatorsRef.current.some(
+          (m) => m.toLowerCase() === selfIdentityRef.current.toLowerCase()
+        )
+        if (message.target.toLowerCase() === selfIdentityRef.current.toLowerCase() && !isMod) {
           setIsMuteLocked(true)
           if (roomRef.current && roomRef.current.localParticipant.isMicrophoneEnabled) {
             roomRef.current.localParticipant.setMicrophoneEnabled(false)
@@ -294,7 +296,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           showToast('You have been muted by the host.')
         }
       } else if (message.type === 'mute-lock-all') {
-        const isMod = moderatorsRef.current.includes(selfIdentityRef.current)
+        const isMod = moderatorsRef.current.some(
+          (m) => m.toLowerCase() === selfIdentityRef.current.toLowerCase()
+        )
         if (!isMod) {
           setIsMuteLocked(true)
           if (roomRef.current && roomRef.current.localParticipant.isMicrophoneEnabled) {
