@@ -7,8 +7,11 @@ import { Video, Plus, LogOut, ArrowRight, ShieldCheck, Copy, Check, Calendar, Tr
 import { Footer } from '@/components/footer'
 import { QRCodeModal } from '@/components/qr-code-modal'
 
+import { useClerk } from '@clerk/nextjs'
+
 export default function DashboardPage() {
   const router = useRouter()
+  const { signOut } = useClerk()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [meetings, setMeetings] = useState<any[]>([])
@@ -44,8 +47,7 @@ export default function DashboardPage() {
   }, [])
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
+    await signOut(() => router.push('/login'))
   }
 
   const handleJoin = (e: React.FormEvent) => {
