@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Video, ShieldAlert, Users, Globe, Plus, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Video, ShieldAlert, Users, Globe, Plus, Copy, Check, QrCode } from 'lucide-react'
 import { Footer } from '@/components/footer'
+import { QRCodeModal } from '@/components/qr-code-modal'
 
 export default function CreateMeetingPage() {
   const router = useRouter()
@@ -16,6 +17,7 @@ export default function CreateMeetingPage() {
   const [error, setError] = useState<string | null>(null)
   const [createdMeeting, setCreatedMeeting] = useState<any | null>(null)
   const [copied, setCopied] = useState(false)
+  const [showQR, setShowQR] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -121,7 +123,15 @@ export default function CreateMeetingPage() {
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-zinc-800 border border-zinc-700 py-3 font-medium text-white hover:bg-zinc-700 transition"
                 >
                   {copied ? <Check className="size-4 text-emerald-400" /> : <Copy className="size-4" />}
-                  <span>{copied ? 'Link Copied!' : 'Copy Link'}</span>
+                  <span>{copied ? 'Copied!' : 'Copy Link'}</span>
+                </button>
+
+                <button
+                  onClick={() => setShowQR(true)}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 py-3 font-semibold text-indigo-300 hover:bg-indigo-600/30 transition"
+                >
+                  <QrCode className="size-4" />
+                  <span>QR Code</span>
                 </button>
 
                 <button
@@ -132,6 +142,13 @@ export default function CreateMeetingPage() {
                   <span>Start Meeting</span>
                 </button>
               </div>
+
+              <QRCodeModal
+                isOpen={showQR}
+                onClose={() => setShowQR(false)}
+                meetingId={createdMeeting.meetingId}
+                title={createdMeeting.title}
+              />
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="mt-6 space-y-5">
