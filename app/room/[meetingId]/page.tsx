@@ -1136,16 +1136,26 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
   // --- error UI view ---
   if (error || accessDenied) {
+    const isNotFound = error === 'Meeting not found'
     return (
       <div className="flex min-h-dvh items-center justify-center bg-black px-4">
         <div className="w-full max-w-md space-y-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-8 text-center shadow-2xl">
-          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-red-950 border border-red-800 text-red-400">
-            <Lock className="size-6" />
+          <div className={cn(
+            "mx-auto flex size-14 items-center justify-center rounded-full border",
+            isNotFound
+              ? "bg-amber-950 border-amber-800 text-amber-400"
+              : "bg-red-950 border-red-800 text-red-400"
+          )}>
+            {isNotFound ? <AlertTriangle className="size-6" /> : <Lock className="size-6" />}
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Access Denied</h2>
+            <h2 className="text-xl font-bold text-white">
+              {isNotFound ? 'Meeting Not Found' : 'Access Denied'}
+            </h2>
             <p className="mt-2 text-sm text-zinc-450">
-              {typeof error === 'string' ? error : (error as any)?.message || 'Access error.'}
+              {isNotFound
+                ? 'The meeting code you entered is invalid or the meeting has ended.'
+                : (typeof error === 'string' ? error : (error as any)?.message || 'Access error.')}
             </p>
           </div>
           <Link
