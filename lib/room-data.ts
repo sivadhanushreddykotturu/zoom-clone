@@ -6,6 +6,7 @@ export type Participant = {
   isSpeaking: boolean
   isMuted: boolean
   isSelf?: boolean
+  isAway?: boolean
 }
 
 export const ROOM = {

@@ -614,7 +614,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           })
           .on(RoomEvent.Disconnected, (reason) => {
             if (!cancelled) {
-              if (reason === 'kicked') {
+              if (String(reason) === 'kicked') {
                 showToast('You were removed from the room by the host.')
               } else {
                 showToast('You have been disconnected from the meeting.')
@@ -744,7 +744,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       if (room) {
         const textEncoder = new TextEncoder()
         const payload = textEncoder.encode(JSON.stringify({ type: 'mute-lock-all' }))
-        room.localParticipant.publishData(payload, { reliable: true })
+        room.localParticipant.publishData(payload as any, { reliable: true })
       }
 
       showToast('Everyone has been muted.')
@@ -827,7 +827,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       if (room) {
         const textEncoder = new TextEncoder()
         const payload = textEncoder.encode(JSON.stringify({ type: 'mute-lock', target: identity }))
-        room.localParticipant.publishData(payload, { reliable: true })
+        room.localParticipant.publishData(payload as any, { reliable: true })
       }
 
       showToast(`Muted ${identity}`)
@@ -844,7 +844,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     const payload = textEncoder.encode(
       JSON.stringify({ type: 'unmute-request', target: identity }),
     )
-    room.localParticipant.publishData(payload, { reliable: true })
+    room.localParticipant.publishData(payload as any, { reliable: true })
     showToast(`Unmute request sent to ${identity}.`)
   }, [showToast])
 
@@ -869,7 +869,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             identityName: name,
           }),
         )
-        room.localParticipant.publishData(payload, { reliable: true })
+        room.localParticipant.publishData(payload as any, { reliable: true })
       }
 
       setModerators((prev) => {
@@ -915,7 +915,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       if (currentScreenSharer && currentScreenSharer !== selfIdentity) {
         const textEncoder = new TextEncoder()
         const stopPayload = textEncoder.encode(JSON.stringify({ type: 'stop-screenshare-signal' }))
-        room.localParticipant.publishData(stopPayload, { reliable: true })
+        room.localParticipant.publishData(stopPayload as any, { reliable: true })
       }
       startScreenSharingLocally()
       return
@@ -930,7 +930,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     const payload = textEncoder.encode(
       JSON.stringify({ type: 'screenshare-request' })
     )
-    room.localParticipant.publishData(payload, { reliable: true })
+    room.localParticipant.publishData(payload as any, { reliable: true })
     showToast('Sent screenshare request to host. Waiting for approval...')
 
     setScreenshareCooldown(true)
@@ -948,13 +948,13 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       setIsScreenSharing(false)
     } else if (currentScreenSharer) {
       const stopPayload = textEncoder.encode(JSON.stringify({ type: 'stop-screenshare-signal' }))
-      roomRef.current.localParticipant.publishData(stopPayload, { reliable: true })
+      roomRef.current.localParticipant.publishData(stopPayload as any, { reliable: true })
     }
 
     const approvePayload = textEncoder.encode(
       JSON.stringify({ type: 'screenshare-approved', target: screenshareRequest.identity })
     )
-    roomRef.current.localParticipant.publishData(approvePayload, { reliable: true })
+    roomRef.current.localParticipant.publishData(approvePayload as any, { reliable: true })
     
     setScreenshareRequest(null)
     showToast(`Approved screenshare request for ${screenshareRequest.name}`)
@@ -967,7 +967,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     const denyPayload = textEncoder.encode(
       JSON.stringify({ type: 'screenshare-denied', target: screenshareRequest.identity })
     )
-    roomRef.current.localParticipant.publishData(denyPayload, { reliable: true })
+    roomRef.current.localParticipant.publishData(denyPayload as any, { reliable: true })
     setScreenshareRequest(null)
   }
 
@@ -982,7 +982,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       const payload = textEncoder.encode(
         JSON.stringify({ type: 'chat', text: chatInput.trim() }),
       )
-      room.localParticipant.publishData(payload, { reliable: true })
+      room.localParticipant.publishData(payload as any, { reliable: true })
       
       setChatMessages((prev) => [
         ...prev,
@@ -1005,7 +1005,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       const payload = textEncoder.encode(
         JSON.stringify({ type: 'reaction', emoji }),
       )
-      room.localParticipant.publishData(payload, { reliable: false })
+      room.localParticipant.publishData(payload as any, { reliable: false })
       
       setReactions((prev) => ({ ...prev, [selfIdentity]: emoji }))
       setTimeout(() => {
@@ -1038,7 +1038,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       const textEncoder = new TextEncoder()
       const payload = textEncoder.encode(JSON.stringify({ type: 'end-meeting-signal' }))
       try {
-        room.localParticipant.publishData(payload, { reliable: true })
+        room.localParticipant.publishData(payload as any, { reliable: true })
       } catch (err) {
         console.error(err)
       }

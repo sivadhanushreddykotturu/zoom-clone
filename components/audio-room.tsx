@@ -104,6 +104,9 @@ export function AudioRoom() {
         onLeave={handleLeave}
         onMuteEveryone={handleMuteEveryone}
         onKickParticipant={handleKickParticipant}
+        onSendReaction={() => {}}
+        onToggleChat={() => {}}
+        isChatOpen={false}
       />
     </div>
   )

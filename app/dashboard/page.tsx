@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Video, Plus, LogOut, ArrowRight, ShieldCheck, Copy, Check, Calendar, Trash2 } from 'lucide-react'
+import { Video, Plus, LogOut, ArrowRight, ShieldCheck, Copy, Check, Calendar, Trash2, QrCode } from 'lucide-react'
 import { Footer } from '@/components/footer'
+import { QRCodeModal } from '@/components/qr-code-modal'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const [joinCode, setJoinCode] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [selectedQrMeeting, setSelectedQrMeeting] = useState<{ meetingId: string; title: string } | null>(null)
 
   const loadData = async () => {
     try {
@@ -245,13 +247,24 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="mt-5 pt-4 border-t border-zinc-800/80 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => copyLink(m.meetingId)}
-                      className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition"
-                    >
-                      {copiedId === m.meetingId ? <Check className="size-3.5 text-emerald-450" /> : <Copy className="size-3.5" />}
-                      <span>{copiedId === m.meetingId ? 'Copied' : 'Share Link'}</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => copyLink(m.meetingId)}
+                        className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition"
+                      >
+                        {copiedId === m.meetingId ? <Check className="size-3.5 text-emerald-450" /> : <Copy className="size-3.5" />}
+                        <span>{copiedId === m.meetingId ? 'Copied' : 'Share'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedQrMeeting({ meetingId: m.meetingId, title: m.title })}
+                        className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition"
+                        title="View QR Code"
+                      >
+                        <QrCode className="size-3.5" />
+                        <span>QR</span>
+                      </button>
+                    </div>
 
                     <Link
                       href={`/room/${m.meetingId}`}
@@ -267,6 +280,16 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+
+      {selectedQrMeeting && (
+        <QRCodeModal
+          isOpen={!!selectedQrMeeting}
+          onClose={() => setSelectedQrMeeting(null)}
+          meetingId={selectedQrMeeting.meetingId}
+          title={selectedQrMeeting.title}
+        />
+      )}
+
       <Footer />
     </div>
   )

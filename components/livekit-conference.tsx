@@ -11,8 +11,9 @@ import {
   useTracks,
 } from '@livekit/components-react'
 import '@livekit/components-styles'
-import { Shield, Users, Mic, MicOff, Video, VideoOff, PhoneOff, Settings, AlertCircle } from 'lucide-react'
+import { Shield, Users, Mic, MicOff, Video, VideoOff, PhoneOff, Settings, AlertCircle, QrCode } from 'lucide-react'
 import { ModeratorPanel } from './moderator-panel'
+import { QRCodeModal } from './qr-code-modal'
 
 interface LiveKitConferenceProps {
   token: string
@@ -32,6 +33,7 @@ export function LiveKitConference({
   user
 }: LiveKitConferenceProps) {
   const [showModPanel, setShowModPanel] = useState(false)
+  const [showQR, setShowQR] = useState(false)
   const [isMockToken, setIsMockToken] = useState(false)
 
   useEffect(() => {
@@ -54,6 +56,14 @@ export function LiveKitConference({
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowQR(true)}
+              className="flex items-center gap-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 px-3.5 py-2 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/30 transition"
+            >
+              <QrCode className="size-4" />
+              <span>QR Join</span>
+            </button>
+
             {(isHost || isModerator) && (
               <button
                 onClick={() => setShowModPanel(true)}
@@ -111,6 +121,12 @@ export function LiveKitConference({
             onClose={() => setShowModPanel(false)}
           />
         )}
+
+        <QRCodeModal
+          isOpen={showQR}
+          onClose={() => setShowQR(false)}
+          meetingId={meetingId}
+        />
       </div>
     )
   }
@@ -132,15 +148,25 @@ export function LiveKitConference({
             <span className="text-white">Room: {meetingId}</span>
           </div>
 
-          {(isHost || isModerator) && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowModPanel(true)}
+              onClick={() => setShowQR(true)}
               className="flex items-center gap-2 rounded-2xl border border-indigo-500/40 bg-indigo-600/30 px-4 py-2 text-xs font-bold text-indigo-200 backdrop-blur-md hover:bg-indigo-600/50 transition shadow-lg"
             >
-              <Shield className="size-4" />
-              <span>Admin Controls</span>
+              <QrCode className="size-4" />
+              <span>QR Join</span>
             </button>
-          )}
+
+            {(isHost || isModerator) && (
+              <button
+                onClick={() => setShowModPanel(true)}
+                className="flex items-center gap-2 rounded-2xl border border-indigo-500/40 bg-indigo-600/30 px-4 py-2 text-xs font-bold text-indigo-200 backdrop-blur-md hover:bg-indigo-600/50 transition shadow-lg"
+              >
+                <Shield className="size-4" />
+                <span>Admin Controls</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* LiveKit Video Conference Component */}
@@ -157,6 +183,13 @@ export function LiveKitConference({
             onClose={() => setShowModPanel(false)}
           />
         )}
+
+        {/* QR Code Modal */}
+        <QRCodeModal
+          isOpen={showQR}
+          onClose={() => setShowQR(false)}
+          meetingId={meetingId}
+        />
       </div>
     </LiveKitRoom>
   )
