@@ -107,6 +107,8 @@ export function AudioRoom() {
         onSendReaction={() => {}}
         onToggleChat={() => {}}
         isChatOpen={false}
+        onTogglePolls={() => {}}
+        isPollsOpen={false}
       />
     </div>
   )

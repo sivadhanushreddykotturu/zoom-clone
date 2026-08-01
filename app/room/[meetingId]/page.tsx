@@ -18,6 +18,7 @@ import type { Participant as UiParticipant } from '@/lib/room-data'
 import { Lock, MailCheck, ArrowLeft, Send, X, Shield, VolumeX, Mic, Monitor, UserCheck, AlertTriangle, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
+import { PollsPanel, IPoll } from '@/components/polls-panel'
 
 interface ChatMessage {
   sender: string
@@ -190,6 +191,10 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
   // Reactions state
   const [reactions, setReactions] = useState<{ [identity: string]: string }>({})
+
+  // Polls state
+  const [polls, setPolls] = useState<IPoll[]>([])
+  const [isPollsOpen, setIsPollsOpen] = useState(false)
 
   // Lobby side drawer
   const [isLobbyOpen, setIsLobbyOpen] = useState(false)
@@ -407,6 +412,31 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           roomRef.current.disconnect()
         }
         router.push('/dashboard')
+      } else if (message.type === 'poll-created') {
+        setPolls((prev) => {
+          if (prev.some((p) => p.pollId === message.poll.pollId)) return prev
+          return [...prev, message.poll]
+        })
+        showToast(`New Poll: "${message.poll.question}" launched!`)
+      } else if (message.type === 'poll-voted') {
+        setPolls((prev) =>
+          prev.map((p) => {
+            if (p.pollId !== message.pollId) return p
+            const votes = [...p.votes]
+            const voteIdx = votes.findIndex((v) => v.voterEmail.toLowerCase() === message.voterEmail.toLowerCase())
+            if (voteIdx > -1) {
+              votes[voteIdx].optionIndex = message.optionIndex
+            } else {
+              votes.push({ voterEmail: message.voterEmail, optionIndex: message.optionIndex })
+            }
+            return { ...p, votes }
+          })
+        )
+      } else if (message.type === 'poll-closed') {
+        setPolls((prev) =>
+          prev.map((p) => (p.pollId === message.pollId ? { ...p, status: 'ended' as const } : p))
+        )
+        showToast('A poll has been ended.')
       }
     } catch (e) {
       console.error('Error parsing data channel message:', e)
@@ -523,6 +553,17 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         setModerators(mods)
         setMeetingTitle(meetingTitle || '')
         setLobbyStatus('approved')
+
+        // Fetch pre-existing polls
+        try {
+          const pollsRes = await fetch(`/api/meetings/${meetingId}/polls`)
+          if (pollsRes.ok) {
+            const pollsData = await pollsRes.json()
+            setPolls(pollsData.polls || [])
+          }
+        } catch (e) {
+          console.error('Failed to pre-fetch polls:', e)
+        }
 
         // Mock Bypass
         if (token.startsWith('mock_livekit_token_')) {
@@ -1018,6 +1059,65 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     }
   }
 
+  // Poll Lifecycle Callbacks
+  const handlePollCreated = useCallback((newPoll: IPoll) => {
+    setPolls((prev) => [...prev, newPoll])
+    const room = roomRef.current
+    if (room) {
+      const textEncoder = new TextEncoder()
+      const payload = textEncoder.encode(JSON.stringify({ type: 'poll-created', poll: newPoll }))
+      try {
+        room.localParticipant.publishData(payload as any, { reliable: true })
+      } catch (err) {
+        console.error(err)
+      }
+    }
+  }, [])
+
+  const handleVoteSubmitted = useCallback((pollId: string, optionIndex: number) => {
+    setPolls((prev) =>
+      prev.map((p) => {
+        if (p.pollId !== pollId) return p
+        const votes = [...p.votes]
+        const voteIdx = votes.findIndex((v) => v.voterEmail.toLowerCase() === selfIdentity.toLowerCase())
+        if (voteIdx > -1) {
+          votes[voteIdx].optionIndex = optionIndex
+        } else {
+          votes.push({ voterEmail: selfIdentity, optionIndex })
+        }
+        return { ...p, votes }
+      })
+    )
+    const room = roomRef.current
+    if (room) {
+      const textEncoder = new TextEncoder()
+      const payload = textEncoder.encode(
+        JSON.stringify({ type: 'poll-voted', pollId, optionIndex, voterEmail: selfIdentity })
+      )
+      try {
+        room.localParticipant.publishData(payload as any, { reliable: true })
+      } catch (err) {
+        console.error(err)
+      }
+    }
+  }, [selfIdentity])
+
+  const handlePollClosed = useCallback((pollId: string) => {
+    setPolls((prev) =>
+      prev.map((p) => (p.pollId === pollId ? { ...p, status: 'ended' as const } : p))
+    )
+    const room = roomRef.current
+    if (room) {
+      const textEncoder = new TextEncoder()
+      const payload = textEncoder.encode(JSON.stringify({ type: 'poll-closed', pollId }))
+      try {
+        room.localParticipant.publishData(payload as any, { reliable: true })
+      } catch (err) {
+        console.error(err)
+      }
+    }
+  }, [])
+
   const participantsWithReactions = useMemo(() => {
     return participants.map((p) => ({
       ...p,
@@ -1394,9 +1494,17 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           onMuteEveryone={handleMuteEveryone}
           onKickParticipant={handleKickParticipant}
           onSendReaction={handleSendReaction}
-          onToggleChat={() => setIsChatOpen(!isChatOpen)}
+          onToggleChat={() => {
+            setIsChatOpen(!isChatOpen)
+            setIsPollsOpen(false)
+          }}
           isChatOpen={isChatOpen}
           unreadChats={unreadCount}
+          onTogglePolls={() => {
+            setIsPollsOpen(!isPollsOpen)
+            setIsChatOpen(false)
+          }}
+          isPollsOpen={isPollsOpen}
           isHost={selfIdentity.toLowerCase() === moderators[0]?.toLowerCase()}
           onEndMeeting={() => setShowEndMeetingPrompt(true)}
           isScreenSharing={isScreenSharing}
@@ -1454,6 +1562,20 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             </button>
           </form>
         </div>
+      )}
+
+      {/* Real-time Polls sidebar Panel */}
+      {isPollsOpen && (
+        <PollsPanel
+          meetingId={meetingId}
+          isModerator={isMod}
+          currentUserEmail={selfIdentity}
+          polls={polls}
+          onVoteSubmitted={handleVoteSubmitted}
+          onPollCreated={handlePollCreated}
+          onPollClosed={handlePollClosed}
+          onClose={() => setIsPollsOpen(false)}
+        />
       )}
 
       {/* Waiting Room Queue Lobby sidebar Panel */}

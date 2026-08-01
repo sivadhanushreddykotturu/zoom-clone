@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { LogOut, Mic, MicOff, MessageSquare, Smile, ShieldAlert, Monitor } from 'lucide-react'
+import { LogOut, Mic, MicOff, MessageSquare, Smile, ShieldAlert, Monitor, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AdminActionsMenu } from '@/components/admin-actions-menu'
 
@@ -20,6 +20,8 @@ type ControlBarProps = {
   onEndMeeting?: () => void
   isScreenSharing?: boolean
   onToggleScreenshare?: () => void
+  onTogglePolls?: () => void
+  isPollsOpen?: boolean
 }
 
 const EMOJIS = ['👍', '✋', '❤️', '👏', '😂']
@@ -39,6 +41,8 @@ export function ControlBar({
   onEndMeeting,
   isScreenSharing = false,
   onToggleScreenshare,
+  onTogglePolls,
+  isPollsOpen = false,
 }: ControlBarProps) {
   const [showEmojiMenu, setShowEmojiMenu] = useState(false)
 
@@ -65,6 +69,23 @@ export function ControlBar({
             </span>
           )}
         </button>
+
+        {/* Toggle Polls */}
+        {onTogglePolls && (
+          <button
+            type="button"
+            onClick={onTogglePolls}
+            aria-label="Toggle polls"
+            className={cn(
+              'flex size-9 sm:size-11 shrink-0 items-center justify-center rounded-full border transition-colors',
+              isPollsOpen
+                ? 'border-white bg-white text-black'
+                : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-white',
+            )}
+          >
+            <BarChart3 className="size-4 sm:size-4.5" />
+          </button>
+        )}
 
         {/* Emoji Reactions Picker */}
         <div className="relative shrink-0">
