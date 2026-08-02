@@ -113,7 +113,7 @@ export default function DashboardPage() {
               <p className="text-sm font-semibold text-white">{user?.name || user?.email?.split('@')[0]}</p>
               <p className="text-xs text-zinc-500">{user?.email}</p>
             </div>
-            <UserButton afterSignOutUrl="/login" />
+            <UserButton />
           </div>
         </div>
       </header>
