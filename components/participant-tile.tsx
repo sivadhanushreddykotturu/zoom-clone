@@ -27,8 +27,8 @@ export function ParticipantTile({
 }) {
   const { name, isAdmin, isSpeaking, isMuted, isSelf, id, reaction, isAway } = participant
 
-  // Generate unique Dicebear adventurer avatar using user's name/ID as seed
-  const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(id || name)}`
+  // Use custom avatar if available, otherwise generate unique Dicebear adventurer avatar
+  const avatarUrl = participant.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(id || name)}`
 
   return (
     <div className={cn("flex flex-col items-center gap-2 text-center transition-opacity duration-300", isAway && "opacity-40")}>

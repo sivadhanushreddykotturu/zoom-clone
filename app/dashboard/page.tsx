@@ -7,7 +7,7 @@ import { Video, Plus, LogOut, ArrowRight, ShieldCheck, Copy, Check, Calendar, Tr
 import { Footer } from '@/components/footer'
 import { QRCodeModal } from '@/components/qr-code-modal'
 
-import { useClerk } from '@clerk/nextjs'
+import { useClerk, UserButton } from '@clerk/nextjs'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -111,15 +111,9 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-white">{user?.name || user?.email?.split('@')[0]}</p>
-              <p className="text-xs text-zinc-550">{user?.email}</p>
+              <p className="text-xs text-zinc-500">{user?.email}</p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-850 px-3.5 py-2 text-xs font-medium text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
-            >
-              <LogOut className="size-3.5" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
+            <UserButton afterSignOutUrl="/login" />
           </div>
         </div>
       </header>

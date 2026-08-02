@@ -95,7 +95,7 @@ export async function POST(req: Request) {
         isModerator,
         moderators: meeting.moderators,
         meetingTitle: meeting.title,
-        user: { email: session.email, name: session.name }
+        user: { email: session.email, name: session.name, avatar: session.avatar }
       })
     }
 
@@ -105,7 +105,8 @@ export async function POST(req: Request) {
       metadata: JSON.stringify({
         isHost,
         isModerator,
-        email: session.email
+        email: session.email,
+        avatar: session.avatar
       })
     })
 
@@ -126,7 +127,7 @@ export async function POST(req: Request) {
       isModerator,
       moderators: meeting.moderators,
       meetingTitle: meeting.title,
-      user: { email: session.email, name: session.name }
+      user: { email: session.email, name: session.name, avatar: session.avatar }
     })
   } catch (error: any) {
     console.error('LiveKit token generation error:', error)

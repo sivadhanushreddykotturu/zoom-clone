@@ -60,10 +60,20 @@ function toUiParticipant(
     }
   }
 
+  let avatar = ''
+  try {
+    if (p.metadata) {
+      const meta = JSON.parse(p.metadata)
+      avatar = meta.avatar || ''
+    }
+  } catch (e) {
+    console.error('Failed to parse participant metadata:', e)
+  }
+
   return {
     id: p.identity,
     name: p.name || p.identity,
-    avatar: '', // generated dynamically via Dicebear
+    avatar,
     isAdmin,
     isSpeaking,
     isMuted,
