@@ -5,12 +5,7 @@
  * ALLOWED_REGISTRATION_DOMAINS array below (e.g. ['@kluniversity.in', '@gmail.com']).
  */
 
-export const ALLOWED_REGISTRATION_DOMAINS: string[] = [
-  '@kluniversity.in',
-  // Add new allowed email domains here in the future:
-  // '@gmail.com',
-  // '@outlook.com',
-]
+export const ALLOWED_REGISTRATION_DOMAINS: string[] = []
 
 /**
  * Central Configuration for Authorized Meeting Creators (Hosts).
