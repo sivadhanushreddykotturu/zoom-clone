@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'ZoomClone — Secure Video Conferencing',
+  title: 'Meettly — Secure Video Conferencing',
   description:
     'A premium, minimal black and white live audio and video meeting room protected by Clerk & MongoDB.',
   generator: 'v0.app',

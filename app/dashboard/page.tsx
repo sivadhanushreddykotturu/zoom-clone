@@ -105,7 +105,7 @@ export default function DashboardPage() {
             <div className="flex size-10 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-850 text-white">
               <Video className="size-5" />
             </div>
-            <span className="font-bold tracking-tight text-white sm:text-lg">ZoomClone</span>
+            <span className="font-bold tracking-tight text-white sm:text-lg">Meettly</span>
           </div>
 
           <div className="flex items-center gap-4">

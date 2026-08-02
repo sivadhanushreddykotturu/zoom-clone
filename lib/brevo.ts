@@ -23,7 +23,7 @@ export async function sendOtpEmail(email: string, code: string) {
   const payload = {
     sender: { name: senderName, email: senderEmail },
     to: [{ email }],
-    subject: `${code} is your ZoomClone login code`,
+    subject: `${code} is your Meettly login code`,
     htmlContent: `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Your Login Code</title></head>
@@ -36,7 +36,7 @@ export async function sendOtpEmail(email: string, code: string) {
             <span style="color:#fff;font-size:22px;">📹</span>
           </div>
           <h1 style="color:#f4f4f5;font-size:22px;margin:16px 0 4px;">Your Login Code</h1>
-          <p style="color:#71717a;font-size:14px;margin:0;">Use this to sign in to ZoomClone</p>
+          <p style="color:#71717a;font-size:14px;margin:0;">Use this to sign in to Meettly</p>
         </td></tr>
         <tr><td align="center" style="padding:0 0 24px;">
           <div style="background:#09090b;border:1px solid #3730a3;border-radius:10px;padding:20px 40px;display:inline-block;">

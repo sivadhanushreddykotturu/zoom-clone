@@ -1,6 +1,6 @@
 {
-  "name": "ZoomClone",
-  "short_name": "ZoomClone",
+  "name": "Meettly",
+  "short_name": "Meettly",
   "description": "Secure domain-restricted video conferencing app",
   "start_url": "/",
   "display": "standalone",
