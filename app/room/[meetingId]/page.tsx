@@ -610,6 +610,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     let cancelled = false
 
     async function connectToRoom() {
+      if (!tokenData || !preJoinSettings) return
+      const { isMuted: initialMute, audioDeviceId: initialDeviceId } = preJoinSettings
       setLoading(true)
       try {
         const { token, serverUrl } = tokenData
@@ -622,7 +624,7 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           setConnected(true)
           setLoading(false)
           setParticipants([
-            { id: identity, name: name + ' (You)', avatar: '', isAdmin: mods.includes(identity), isSpeaking: false, isMuted: preJoinSettings.isMuted, isSelf: true },
+            { id: identity, name: name + ' (You)', avatar: '', isAdmin: mods.includes(identity), isSpeaking: false, isMuted: initialMute, isSelf: true },
             { id: 'alex@domain.com', name: 'Alex Okafor', avatar: '', isAdmin: false, isSpeaking: false, isMuted: true }
           ])
           connectedOnceRef.current = true
@@ -728,14 +730,14 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         }
 
         // Apply audio device settings from Pre-Join Lobby
-        if (preJoinSettings.audioDeviceId) {
+        if (initialDeviceId) {
           try {
-            await livekitRoom.switchActiveDevice('audioinput', preJoinSettings.audioDeviceId)
+            await livekitRoom.switchActiveDevice('audioinput', initialDeviceId)
           } catch (e) {
             console.warn('Failed to switch audio input device:', e)
           }
         }
-        await livekitRoom.localParticipant.setMicrophoneEnabled(!preJoinSettings.isMuted)
+        await livekitRoom.localParticipant.setMicrophoneEnabled(!initialMute)
 
         connectedOnceRef.current = true
         setConnected(true)
