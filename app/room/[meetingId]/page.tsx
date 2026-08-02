@@ -19,6 +19,7 @@ import { Lock, MailCheck, ArrowLeft, Send, X, Shield, VolumeX, Mic, Monitor, Use
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { PollsPanel, IPoll } from '@/components/polls-panel'
+import { PreJoinLobby } from '@/components/pre-join-lobby'
 
 interface ChatMessage {
   sender: string
@@ -188,6 +189,11 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   const [accessDenied, setAccessDenied] = useState<{ allowedDomains: string[] } | null>(null)
   const [connected, setConnected] = useState(false)
 
+  // Pre-join lobby states
+  const [hasRetrievedToken, setHasRetrievedToken] = useState(false)
+  const [tokenData, setTokenData] = useState<{ token: string; serverUrl: string } | null>(null)
+  const [preJoinSettings, setPreJoinSettings] = useState<{ isMuted: boolean; audioDeviceId: string } | null>(null)
+
   const [selfIdentity, setSelfIdentity] = useState('')
   const [selfName, setSelfName] = useState('')
   const [moderators, setModerators] = useState<string[]>([])
@@ -245,6 +251,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
   useEffect(() => { moderatorsRef.current = moderators }, [moderators])
   useEffect(() => { currentScreenSharerRef.current = currentScreenSharer }, [currentScreenSharer])
   useEffect(() => { isScreenSharingRef.current = isScreenSharing }, [isScreenSharing])
+
+  const preJoinSettingsRef = useRef(preJoinSettings)
+  useEffect(() => { preJoinSettingsRef.current = preJoinSettings }, [preJoinSettings])
 
   useEffect(() => {
     isChatOpenRef.current = isChatOpen
@@ -508,14 +517,13 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
     return () => clearInterval(interval)
   }, [connected, moderators, selfIdentity, fetchLobbyList])
 
-  // Start connect flow (runs exactly once per mount or lobby status shift to approved)
+  // 3. Step 1: Check lobby & retrieve token (runs once on mount or lobby status change)
   useEffect(() => {
     if (lobbyStatus === 'pending' || lobbyStatus === 'denied') return
-    // Prevent re-running if we already connected successfully
-    if (connectedOnceRef.current) return
+    if (hasRetrievedToken) return
     let cancelled = false
 
-    async function connect() {
+    async function fetchToken() {
       try {
         // Try lobby registration first
         const lobbyCheck = await fetch(`/api/meetings/${meetingId}/lobby`, { method: 'POST' })
@@ -553,6 +561,8 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           return
         }
 
+        if (cancelled) return
+
         const { token, serverUrl, meetingTitle } = data
         const identity = data.user?.email || ''
         const name = data.user?.name || identity.split('@')[0]
@@ -563,6 +573,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         setModerators(mods)
         setMeetingTitle(meetingTitle || '')
         setLobbyStatus('approved')
+        setTokenData({ token, serverUrl })
+        setHasRetrievedToken(true)
+        setLoading(false)
 
         // Fetch pre-existing polls
         try {
@@ -574,15 +587,45 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         } catch (e) {
           console.error('Failed to pre-fetch polls:', e)
         }
+      } catch (err: any) {
+        if (!cancelled) {
+          console.error('Room token retrieval error:', err)
+          setError(err.message || 'Failed to initialize session.')
+          setLoading(false)
+        }
+      }
+    }
+
+    fetchToken()
+
+    return () => {
+      cancelled = true
+    }
+  }, [meetingId, router, lobbyStatus, hasRetrievedToken])
+
+  // 4. Step 2: Connect to LiveKit Room once Pre-Join settings are configured
+  useEffect(() => {
+    if (!preJoinSettings || !tokenData) return
+    if (connectedOnceRef.current) return
+    let cancelled = false
+
+    async function connectToRoom() {
+      setLoading(true)
+      try {
+        const { token, serverUrl } = tokenData
+        const identity = selfIdentityRef.current
+        const name = selfNameRef.current
+        const mods = moderatorsRef.current
 
         // Mock Bypass
         if (token.startsWith('mock_livekit_token_')) {
           setConnected(true)
           setLoading(false)
           setParticipants([
-            { id: identity, name: name + ' (You)', avatar: '', isAdmin: mods.includes(identity), isSpeaking: false, isMuted: true, isSelf: true },
+            { id: identity, name: name + ' (You)', avatar: '', isAdmin: mods.includes(identity), isSpeaking: false, isMuted: preJoinSettings.isMuted, isSelf: true },
             { id: 'alex@domain.com', name: 'Alex Okafor', avatar: '', isAdmin: false, isSpeaking: false, isMuted: true }
           ])
+          connectedOnceRef.current = true
           return
         }
 
@@ -684,7 +727,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           return
         }
 
-        await livekitRoom.localParticipant.setMicrophoneEnabled(false)
+        // Apply audio device settings from Pre-Join Lobby
+        if (preJoinSettings.audioDeviceId) {
+          try {
+            await livekitRoom.switchActiveDevice('audioinput', preJoinSettings.audioDeviceId)
+          } catch (e) {
+            console.warn('Failed to switch audio input device:', e)
+          }
+        }
+        await livekitRoom.localParticipant.setMicrophoneEnabled(!preJoinSettings.isMuted)
 
         connectedOnceRef.current = true
         setConnected(true)
@@ -700,16 +751,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       }
     }
 
-    connect()
+    connectToRoom()
 
     return () => {
       cancelled = true
-      // Only disconnect if we haven't marked a successful connection
       if (!connectedOnceRef.current) {
         roomRef.current?.disconnect()
       }
     }
-  }, [meetingId, router, showToast, lobbyStatus])
+  }, [preJoinSettings, tokenData, router, showToast])
 
   const self = participants.find((p) => p.isSelf)
   const isMuted = self?.isMuted ?? true
@@ -1241,6 +1291,17 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
           <p className="text-sm">Connecting...</p>
         </div>
       </div>
+    )
+  }
+
+  // --- pre-join lobby settings screen view ---
+  if (hasRetrievedToken && !preJoinSettings) {
+    return (
+      <PreJoinLobby
+        meetingTitle={meetingTitle}
+        userName={selfName}
+        onJoin={(settings) => setPreJoinSettings(settings)}
+      />
     )
   }
 
