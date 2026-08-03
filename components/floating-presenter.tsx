@@ -135,7 +135,7 @@ export function FloatingPresenter({
       <div className="flex-1 overflow-y-auto min-h-0 py-1 hide-scrollbar">
         <div className="grid grid-cols-4 gap-2 justify-items-center">
           {participants.map((p) => {
-            const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(p.id || p.name)}`
+            const avatarUrl = p.avatar || (p as any).avatarUrl || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(p.id || p.name)}`
             return (
               <div key={p.id} className="flex flex-col items-center gap-1 relative group">
                 <div
