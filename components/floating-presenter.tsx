@@ -49,8 +49,12 @@ export function FloatingPresenter({
   }, [isScreenSharing])
 
   // Function to open native Document Picture-in-Picture window (Chrome/Edge desktop)
+  // Must be triggered by a direct user gesture (click handler)
   const openDocumentPip = async () => {
-    if (typeof window === 'undefined' || !('documentPictureInPicture' in window)) return
+    if (typeof window === 'undefined' || !('documentPictureInPicture' in window)) {
+      alert('Floating Picture-in-Picture window is supported in Chrome, Edge, and Brave desktop browsers.')
+      return
+    }
 
     try {
       if (pipWindow) {
@@ -62,12 +66,12 @@ export function FloatingPresenter({
         height: 280,
       })
 
-      // Copy all style tags & stylesheets into the PiP window so Tailwind works seamlessly
+      // Copy all style tags & stylesheets into the native OS PiP window
       Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).forEach((style) => {
         win.document.head.appendChild(style.cloneNode(true))
       })
 
-      // Add dark background to PiP document
+      // Set up styling for the native OS floating window
       win.document.body.className = 'bg-black text-white font-sans antialiased m-0 p-0 overflow-hidden'
 
       win.addEventListener('pagehide', () => {
@@ -113,25 +117,16 @@ export function FloatingPresenter({
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 ml-2">
-          {!isPipActive && typeof window !== 'undefined' && 'documentPictureInPicture' in window && (
-            <button
-              onClick={openDocumentPip}
-              className="flex items-center gap-1 text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded-md transition"
-              title="Pop out floating OS window over all desktop apps"
-            >
-              <ExternalLink className="size-3" /> Pop Out
-            </button>
-          )}
-
-          <button
-            onClick={() => setIsDismissed(true)}
-            className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition"
-            title="Dismiss popup widget"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            if (pipWindow) pipWindow.close()
+            setIsDismissed(true)
+          }}
+          className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition"
+          title="Dismiss window"
+        >
+          <X className="size-4" />
+        </button>
       </div>
 
       {/* Speaking Status Banner */}
@@ -223,10 +218,43 @@ export function FloatingPresenter({
     return createPortal(presenterContent, pipWindow.document.body)
   }
 
-  // Floating widget overlay
+  // When on main meeting page: show compact bar with "Pop Out" button to launch OS window over all websites
   return (
-    <div className="fixed bottom-24 right-6 z-50 w-72 h-60 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {presenterContent}
+    <div className="fixed bottom-24 right-6 z-50 flex items-center gap-3 rounded-full border border-zinc-800 bg-zinc-950/95 backdrop-blur-md px-4 py-2.5 text-xs font-medium text-white shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-300 select-none">
+      <div className="flex items-center gap-2">
+        <span className="relative flex size-2 shrink-0">
+          <span className="animate-ping absolute inline-flex size-full rounded-full bg-red-400 opacity-75" />
+          <span className="relative inline-flex rounded-full size-2 bg-red-500" />
+        </span>
+        <span className="font-semibold text-zinc-200">You are sharing screen</span>
+      </div>
+
+      {activeSpeaker && (
+        <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1 border-l border-zinc-800 pl-2.5">
+          <Volume2 className="size-3" />
+          <span className="truncate max-w-[90px]">{activeSpeaker.isSelf ? 'You' : activeSpeaker.name}</span>
+        </span>
+      )}
+
+      <div className="flex items-center gap-2 border-l border-zinc-800 pl-2.5">
+        {typeof window !== 'undefined' && 'documentPictureInPicture' in window && (
+          <button
+            onClick={openDocumentPip}
+            className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-bold text-black hover:bg-zinc-200 transition shadow-sm"
+            title="Pop out floating window that stays on top of ALL websites & apps"
+          >
+            <ExternalLink className="size-3.5" /> Pop Out Window
+          </button>
+        )}
+
+        <button
+          onClick={() => setIsDismissed(true)}
+          className="p-1 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition"
+          title="Dismiss bar"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
     </div>
   )
 }
