@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Mic, MicOff, MonitorOff, ExternalLink, Volume2 } from 'lucide-react'
+import { Mic, MicOff, MonitorOff, ExternalLink, Volume2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Participant } from '@/lib/room-data'
 
@@ -39,6 +39,14 @@ export function FloatingPresenter({
 }: FloatingPresenterProps) {
   const [pipWindow, setPipWindow] = useState<Window | null>(null)
   const [isPipActive, setIsPipActive] = useState(false)
+  const [isDismissed, setIsDismissed] = useState(false)
+
+  // Reset dismissal state when screenshare toggles
+  useEffect(() => {
+    if (!isScreenSharing) {
+      setIsDismissed(false)
+    }
+  }, [isScreenSharing])
 
   // Function to open native Document Picture-in-Picture window (Chrome/Edge desktop)
   const openDocumentPip = async () => {
@@ -74,11 +82,9 @@ export function FloatingPresenter({
     }
   }
 
-  // Auto-trigger PiP when starting screenshare on desktop if supported
+  // Auto-close PiP when screenshare stops
   useEffect(() => {
-    if (isScreenSharing && typeof window !== 'undefined' && 'documentPictureInPicture' in window && !pipWindow) {
-      openDocumentPip()
-    } else if (!isScreenSharing && pipWindow) {
+    if (!isScreenSharing && pipWindow) {
       try {
         pipWindow.close()
       } catch (e) {
@@ -89,7 +95,7 @@ export function FloatingPresenter({
     }
   }, [isScreenSharing])
 
-  if (!isScreenSharing) return null
+  if (!isScreenSharing || isDismissed) return null
 
   const activeSpeaker = participants.find((p) => p.isSpeaking && !p.isAway)
 
@@ -107,15 +113,25 @@ export function FloatingPresenter({
           </span>
         </div>
 
-        {!isPipActive && typeof window !== 'undefined' && 'documentPictureInPicture' in window && (
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {!isPipActive && typeof window !== 'undefined' && 'documentPictureInPicture' in window && (
+            <button
+              onClick={openDocumentPip}
+              className="flex items-center gap-1 text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded-md transition"
+              title="Pop out floating OS window over all desktop apps"
+            >
+              <ExternalLink className="size-3" /> Pop Out
+            </button>
+          )}
+
           <button
-            onClick={openDocumentPip}
-            className="flex items-center gap-1 text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded-md transition shrink-0 ml-2"
-            title="Pop out floating OS window over all apps"
+            onClick={() => setIsDismissed(true)}
+            className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition"
+            title="Dismiss popup widget"
           >
-            <ExternalLink className="size-3" /> Pop Out
+            <X className="size-4" />
           </button>
-        )}
+        </div>
       </div>
 
       {/* Speaking Status Banner */}
@@ -202,12 +218,12 @@ export function FloatingPresenter({
     </div>
   )
 
-  // If PiP is active, render via Portal into the PiP window's body
+  // If native OS Picture-in-Picture window is active, render via Portal into OS window
   if (isPipActive && pipWindow) {
     return createPortal(presenterContent, pipWindow.document.body)
   }
 
-  // Fallback / In-page floating widget in bottom-right corner for laptop
+  // Floating widget overlay
   return (
     <div className="fixed bottom-24 right-6 z-50 w-72 h-60 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
       {presenterContent}
