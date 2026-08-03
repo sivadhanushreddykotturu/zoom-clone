@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { PollsPanel, IPoll } from '@/components/polls-panel'
 import { PreJoinLobby } from '@/components/pre-join-lobby'
+import { FloatingPresenter } from '@/components/floating-presenter'
 
 interface ChatMessage {
   sender: string
@@ -1809,6 +1810,18 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
             </div>
           </div>
         </div>
+      )}
+
+      {/* Floating Picture-in-Picture Presenter Widget (Desktop screenshare) */}
+      {!isMobile && (
+        <FloatingPresenter
+          participants={participants}
+          isScreenSharing={isScreenSharing && currentScreenSharer === selfIdentity}
+          isMuted={isMuted}
+          onToggleMute={toggleMute}
+          onStopScreenshare={handleToggleScreenshare}
+          meetingTitle={meetingTitle}
+        />
       )}
 
     </div>
