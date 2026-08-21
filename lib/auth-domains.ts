@@ -19,6 +19,7 @@ export const ALLOWED_REGISTRATION_DOMAINS: string[] = []
 export const ALLOWED_MEETING_CREATORS: string[] = [
   'sivadhanushkotturu@gmail.com',
   'kish6718nandha@gmail.com',
+  'rushitha286@gmail.com'
   // Add additional authorized host emails here in the future:
   // '2400032717@kluniversity.in',
 ]
