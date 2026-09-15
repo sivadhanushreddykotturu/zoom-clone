@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     at.addGrant({
       roomJoin: true,
       room: meetingId,
-      canPublish: true,
+      canPublish: isHost || isModerator,
       canSubscribe: true,
       canPublishData: true,
     })

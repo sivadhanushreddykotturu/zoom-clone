@@ -136,7 +136,22 @@ export async function POST(req: Request) {
         canPublishData: true,
         canSubscribe: true,
       })
+      // Clear raised hand attribute if possible
+      try {
+        const p = await roomService.getParticipant(meetingId, targetIdentity)
+        let meta = {}
+        try { if (p.metadata) meta = JSON.parse(p.metadata) } catch(e){}
+        await roomService.updateParticipant(meetingId, targetIdentity, JSON.stringify({ ...meta, raisedHand: false }))
+      } catch (e) {}
       return NextResponse.json({ success: true, message: `Allowed ${targetIdentity} to unmute` })
+    }
+
+    if (action === 'raise-hand' && targetIdentity) {
+      const p = await roomService.getParticipant(meetingId, targetIdentity)
+      let meta = {}
+      try { if (p.metadata) meta = JSON.parse(p.metadata) } catch(e){}
+      await roomService.updateParticipant(meetingId, targetIdentity, JSON.stringify({ ...meta, raisedHand: true }))
+      return NextResponse.json({ success: true, message: `Hand raised for ${targetIdentity}` })
     }
 
     return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })

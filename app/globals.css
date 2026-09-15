@@ -229,3 +229,7 @@
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(255,255,255,0.2);
 }
+
+
+/* Hide default livekit control bar so we can use custom */
+.lk-control-bar { display: none !important; }

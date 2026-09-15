@@ -23,6 +23,7 @@ export function ModeratorPanel({
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [newModEmail, setNewModEmail] = useState('')
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [removedIdentities, setRemovedIdentities] = useState<string[]>([])
 
   const handleMuteAll = async () => {
     setLoadingAction('mute-all')
@@ -55,6 +56,7 @@ export function ModeratorPanel({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to remove participant')
       setStatusMsg({ type: 'success', text: `Removed ${identity} from meeting.` })
+      setRemovedIdentities(prev => [...prev, identity])
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: err.message })
     } finally {
@@ -180,17 +182,24 @@ export function ModeratorPanel({
           </div>
 
           <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-            {participants.map((p) => (
+            {participants.filter(p => !removedIdentities.includes(p.identity)).map((p) => (
               <div
                 key={p.identity || p.sid}
                 className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-xs"
               >
                 <div className="flex items-center gap-2.5 overflow-hidden">
-                  <div className="flex size-7 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 font-bold">
+                  <div className="flex size-7 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 font-bold relative">
                     {(p.name || p.identity || '?')[0].toUpperCase()}
+                    {p.raisedHand && (
+                      <span className="absolute -top-1 -right-1 flex size-3 items-center justify-center rounded-full bg-amber-500 animate-bounce">
+                      </span>
+                    )}
                   </div>
                   <div className="truncate">
-                    <p className="font-medium text-white truncate">{p.name || p.identity}</p>
+                    <p className="font-medium text-white truncate flex items-center gap-1">
+                      {p.name || p.identity}
+                      {p.raisedHand && <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/20">Hand Raised</span>}
+                    </p>
                     <p className="text-[10px] text-zinc-500 truncate">{p.identity}</p>
                   </div>
                 </div>

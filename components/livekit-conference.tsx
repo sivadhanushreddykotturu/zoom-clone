@@ -14,6 +14,7 @@ import '@livekit/components-styles'
 import { Shield, Users, Mic, MicOff, Video, VideoOff, PhoneOff, Settings, AlertCircle, QrCode } from 'lucide-react'
 import { ModeratorPanel } from './moderator-panel'
 import { QRCodeModal } from './qr-code-modal'
+import { CustomControlBar } from './custom-control-bar'
 
 interface LiveKitConferenceProps {
   token: string
@@ -22,6 +23,38 @@ interface LiveKitConferenceProps {
   isHost: boolean
   isModerator: boolean
   user: { email: string; name?: string }
+}
+
+function ModeratorPanelWrapper({ meetingId, isHost, isModerator, onClose }: any) {
+  const participants = useParticipants()
+  
+  const mapped = participants.map(p => {
+    let raisedHand = false
+    try {
+      if (p.metadata) {
+        const meta = JSON.parse(p.metadata)
+        raisedHand = meta.raisedHand === true
+      }
+    } catch(e) {}
+    
+    return {
+      sid: p.sid,
+      identity: p.identity,
+      name: p.name,
+      isAudioEnabled: p.isMicrophoneEnabled,
+      raisedHand
+    }
+  })
+
+  return (
+    <ModeratorPanel
+      meetingId={meetingId}
+      isHost={isHost}
+      isModerator={isModerator}
+      participants={mapped}
+      onClose={onClose}
+    />
+  )
 }
 
 export function LiveKitConference({
@@ -172,14 +205,14 @@ export function LiveKitConference({
         {/* LiveKit Video Conference Component */}
         <VideoConference />
         <RoomAudioRenderer />
+        <CustomControlBar isHost={isHost} isModerator={isModerator} meetingId={meetingId} />
 
         {/* Moderator Drawer */}
         {showModPanel && (
-          <ModeratorPanel
+          <ModeratorPanelWrapper
             meetingId={meetingId}
             isHost={isHost}
             isModerator={isModerator}
-            participants={[]}
             onClose={() => setShowModPanel(false)}
           />
         )}

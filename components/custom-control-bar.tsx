@@ -1,0 +1,97 @@
+'use client'
+
+import { useLocalParticipant, TrackToggle, DisconnectButton, useRoomContext } from '@livekit/components-react'
+import { Track } from 'livekit-client'
+import { Mic, MicOff, Video, VideoOff, Hand } from 'lucide-react'
+import { useState, useEffect } from 'react'
+
+export function CustomControlBar({ isHost, isModerator, meetingId }: { isHost: boolean, isModerator: boolean, meetingId: string }) {
+  const { localParticipant } = useLocalParticipant()
+  const room = useRoomContext()
+  const canPublish = localParticipant?.permissions?.canPublish ?? false
+  const [requesting, setRequesting] = useState(false)
+
+  // Listen to mute events to auto-revoke permission
+  useEffect(() => {
+    if (!localParticipant) return
+    
+    const handleTrackMuted = (pub: any) => {
+      if (pub.source === Track.Source.Microphone) {
+        // If a participant (not host/mod) mutes themselves, revoke their permission so they must raise hand again
+        if (!isHost && !isModerator && canPublish) {
+          fetch('/api/livekit/admin-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meetingId, action: 'restrict-unmute', targetIdentity: localParticipant.identity })
+          })
+        }
+      }
+    }
+
+    localParticipant.on('trackMuted', handleTrackMuted)
+    return () => {
+      localParticipant.off('trackMuted', handleTrackMuted)
+    }
+  }, [localParticipant, isHost, isModerator, canPublish, meetingId])
+
+  const handleRequestUnmute = async () => {
+    if (canPublish) return
+    setRequesting(true)
+    try {
+      await fetch('/api/livekit/admin-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetingId, action: 'raise-hand', targetIdentity: localParticipant.identity })
+      })
+      // We will also use setAttributes for immediate local/room state
+      if (localParticipant.setAttributes) {
+        await localParticipant.setAttributes({ raisedHand: 'true' })
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setTimeout(() => setRequesting(false), 2000)
+    }
+  }
+
+  return (
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-2xl bg-zinc-900/90 px-6 py-3 border border-zinc-800 backdrop-blur-md shadow-2xl">
+      {/* Mic Button */}
+      {canPublish ? (
+        <TrackToggle 
+          source={Track.Source.Microphone} 
+          className="flex flex-col items-center justify-center p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white transition data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-400"
+        >
+          <Mic className="size-5 mb-1" />
+          <span className="text-[10px] font-medium">Mic</span>
+        </TrackToggle>
+      ) : (
+        <button
+          onClick={handleRequestUnmute}
+          className="flex flex-col items-center justify-center p-3 rounded-xl bg-zinc-800 hover:bg-rose-500/20 text-rose-400 transition"
+          title="Request to Speak (Raise Hand)"
+        >
+          {requesting ? <Hand className="size-5 mb-1 animate-bounce text-amber-400" /> : <MicOff className="size-5 mb-1" />}
+          <span className="text-[10px] font-medium">{requesting ? 'Requested' : 'Unmute'}</span>
+        </button>
+      )}
+
+      {/* Video Button */}
+      {canPublish ? (
+        <TrackToggle 
+          source={Track.Source.Camera} 
+          className="flex flex-col items-center justify-center p-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white transition data-[state=on]:bg-emerald-500/20 data-[state=on]:text-emerald-400"
+        >
+          <Video className="size-5 mb-1" />
+          <span className="text-[10px] font-medium">Video</span>
+        </TrackToggle>
+      ) : null}
+
+      <div className="w-px h-10 bg-zinc-800 mx-2" />
+
+      <DisconnectButton className="flex flex-col items-center justify-center px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition">
+        Leave
+      </DisconnectButton>
+    </div>
+  )
+}
