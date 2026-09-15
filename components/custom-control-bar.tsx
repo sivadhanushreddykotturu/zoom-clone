@@ -11,28 +11,22 @@ export function CustomControlBar({ isHost, isModerator, meetingId }: { isHost: b
   const canPublish = localParticipant?.permissions?.canPublish ?? false
   const [requesting, setRequesting] = useState(false)
 
-  // Listen to mute events to auto-revoke permission
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [prevCanPublish, setPrevCanPublish] = useState(canPublish)
+
+  // Watch for permission changes to show a notification
   useEffect(() => {
-    if (!localParticipant) return
-    
-    const handleTrackMuted = (pub: any) => {
-      if (pub.source === Track.Source.Microphone) {
-        // If a participant (not host/mod) mutes themselves, revoke their permission so they must raise hand again
-        if (!isHost && !isModerator && canPublish) {
-          fetch('/api/livekit/admin-action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ meetingId, action: 'restrict-unmute', targetIdentity: localParticipant.identity })
-          })
-        }
+    if (!isHost && !isModerator) {
+      if (canPublish && !prevCanPublish) {
+        setToastMessage("Host gave you permission! You can now mute/unmute.")
+        setTimeout(() => setToastMessage(null), 5000)
+      } else if (!canPublish && prevCanPublish) {
+        setToastMessage("Your microphone has been locked by the host.")
+        setTimeout(() => setToastMessage(null), 5000)
       }
     }
-
-    localParticipant.on('trackMuted', handleTrackMuted)
-    return () => {
-      localParticipant.off('trackMuted', handleTrackMuted)
-    }
-  }, [localParticipant, isHost, isModerator, canPublish, meetingId])
+    setPrevCanPublish(canPublish)
+  }, [canPublish, prevCanPublish, isHost, isModerator])
 
   const handleRequestUnmute = async () => {
     if (canPublish) return
@@ -55,8 +49,18 @@ export function CustomControlBar({ isHost, isModerator, meetingId }: { isHost: b
   }
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-2xl bg-zinc-900/90 px-6 py-3 border border-zinc-800 backdrop-blur-md shadow-2xl">
-      {/* Mic Button */}
+    <>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4">
+          <div className="rounded-full bg-indigo-600 px-6 py-3 shadow-xl border border-indigo-500/30 flex items-center gap-2">
+            <span className="text-sm font-semibold text-white">{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-2xl bg-zinc-900/90 px-6 py-3 border border-zinc-800 backdrop-blur-md shadow-2xl">
+        {/* Mic Button */}
       {canPublish ? (
         <TrackToggle 
           source={Track.Source.Microphone} 
@@ -93,5 +97,6 @@ export function CustomControlBar({ isHost, isModerator, meetingId }: { isHost: b
         Leave
       </DisconnectButton>
     </div>
+    </>
   )
 }
