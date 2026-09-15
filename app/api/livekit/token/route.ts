@@ -6,12 +6,22 @@ import { getSession } from '@/lib/auth'
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession()
+    let session = await getSession()
+    const { meetingId, guestName, guestIdentity } = await req.json()
+    
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized. Please log in to join.' }, { status: 401 })
+      if (guestName && guestIdentity) {
+        // Create mock session for guest
+        session = {
+          email: guestIdentity,
+          name: guestName + " (Guest)",
+          avatar: ""
+        }
+      } else {
+        return NextResponse.json({ error: 'Unauthorized', requiresGuestLogin: true }, { status: 401 })
+      }
     }
 
-    const { meetingId } = await req.json()
     if (!meetingId) {
       return NextResponse.json({ error: 'Meeting ID is required' }, { status: 400 })
     }
@@ -27,7 +37,7 @@ export async function POST(req: Request) {
     const isHost = meeting.hostEmail === userEmail
     const isModerator = isHost || meeting.moderators.includes(userEmail)
 
-    const lobbyEntry = meeting.lobby.find((p) => p.email === userEmail)
+    const lobbyEntry = meeting.lobby.find((p: any) => p.email === userEmail)
     const isApprovedInLobby = lobbyEntry && lobbyEntry.status === 'approved'
 
     // Enforce lobby waiting room check for regular participants
@@ -67,6 +77,7 @@ export async function POST(req: Request) {
       }
 
       // If no domain or email restrictions were specified by creator, allow any authenticated user
+      // Also allow guests if no restrictions are set
       if (!hasAllowedEmails && !hasAllowedDomains) {
         isAllowed = true
       }
@@ -75,7 +86,7 @@ export async function POST(req: Request) {
     if (!isAllowed) {
       return NextResponse.json(
         {
-          error: `Access Denied: Your email (${session.email}) is not authorized to join this meeting.`,
+          error: `Access Denied: Your account (${session?.email || 'Guest'}) is not authorized to join this meeting.`,
           allowedDomains: meeting.allowedDomains,
           allowedEmails: meeting.allowedEmails
         },
@@ -87,7 +98,6 @@ export async function POST(req: Request) {
     const apiSecret = process.env.LIVEKIT_API_SECRET
 
     if (!apiKey || !apiSecret || apiKey === 'your_livekit_api_key_here') {
-      console.warn('[LiveKit Token] API key/secret not set in env. Returning fallback token.')
       return NextResponse.json({
         token: 'mock_livekit_token_' + Date.now(),
         serverUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || 'ws://localhost:7880',

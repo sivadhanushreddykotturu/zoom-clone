@@ -3,15 +3,50 @@ import { connectDB } from '@/lib/db/connect'
 import { Meeting } from '@/lib/db/models/Meeting'
 import { getSession } from '@/lib/auth'
 
+// Helper to extract session or mock guest session
+async function getSessionOrGuest(req: Request) {
+  let session = await getSession()
+  if (session) return session
+
+  try {
+    // For GET requests, check headers or URL params.
+    // For POST/PATCH, check body if possible.
+    let guestName = ''
+    let guestIdentity = ''
+
+    if (req.method === 'GET') {
+      const url = new URL(req.url)
+      guestName = url.searchParams.get('guestName') || ''
+      guestIdentity = url.searchParams.get('guestIdentity') || ''
+    } else {
+      // We have to read body. If it's already read, this might fail, so we clone.
+      const clone = req.clone()
+      const body = await clone.json()
+      guestName = body.guestName || ''
+      guestIdentity = body.guestIdentity || ''
+    }
+
+    if (guestName && guestIdentity) {
+      return {
+        email: guestIdentity,
+        name: guestName + ' (Guest)',
+        avatar: ''
+      }
+    }
+  } catch (e) {}
+
+  return null
+}
+
 // POST: Ask to join waiting room lobby
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ meetingId: string }> }
 ) {
   try {
-    const session = await getSession()
+    const session = await getSessionOrGuest(req)
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized', requiresGuestLogin: true }, { status: 401 })
     }
 
     const { meetingId } = await params
@@ -33,7 +68,7 @@ export async function POST(
     }
 
     // Check if user has an existing request in the lobby
-    const existing = meeting.lobby.find((p) => p.email === email)
+    const existing = meeting.lobby.find((p: any) => p.email === email)
     if (existing) {
       // If previously denied, allow requesting again (reset status to pending)
       if (existing.status === 'denied') {
@@ -65,9 +100,9 @@ export async function GET(
   { params }: { params: Promise<{ meetingId: string }> }
 ) {
   try {
-    const session = await getSession()
+    const session = await getSessionOrGuest(req)
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized', requiresGuestLogin: true }, { status: 401 })
     }
 
     const { meetingId } = await params
@@ -84,12 +119,12 @@ export async function GET(
 
     // If moderator/host, return full list of pending lobby participants
     if (isHost || isModerator) {
-      const pending = meeting.lobby.filter((p) => p.status === 'pending')
+      const pending = meeting.lobby.filter((p: any) => p.status === 'pending')
       return NextResponse.json({ isModerator: true, pending })
     }
 
     // Else return the requesting user's status
-    const participant = meeting.lobby.find((p) => p.email === email)
+    const participant = meeting.lobby.find((p: any) => p.email === email)
     return NextResponse.json({
       isModerator: false,
       status: participant ? participant.status : 'not_requested',

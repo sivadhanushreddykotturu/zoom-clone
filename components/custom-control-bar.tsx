@@ -2,7 +2,7 @@
 
 import { useLocalParticipant, TrackToggle, DisconnectButton, useRoomContext } from '@livekit/components-react'
 import { Track } from 'livekit-client'
-import { Mic, MicOff, Video, VideoOff, Hand } from 'lucide-react'
+import { Mic, MicOff, Video, VideoOff, Hand, Lock } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 export function CustomControlBar({ isHost, isModerator, meetingId }: { isHost: boolean, isModerator: boolean, meetingId: string }) {
@@ -93,14 +93,27 @@ export function CustomControlBar({ isHost, isModerator, meetingId }: { isHost: b
           <span className="text-[10px] font-medium">Mic</span>
         </TrackToggle>
       ) : (
-        <button
-          onClick={handleRequestUnmute}
-          className="flex flex-col items-center justify-center p-3 rounded-xl bg-zinc-800 hover:bg-rose-500/20 text-rose-400 transition"
-          title="Request to Speak (Raise Hand)"
-        >
-          {requesting ? <Hand className="size-5 mb-1 animate-bounce text-amber-400" /> : <MicOff className="size-5 mb-1" />}
-          <span className="text-[10px] font-medium">{requesting ? 'Requested' : 'Unmute'}</span>
-        </button>
+        <>
+          <div className="flex flex-col items-center justify-center p-3 px-4 rounded-xl bg-zinc-800/50 text-zinc-500 cursor-not-allowed" title="Microphone is locked by the host">
+            <div className="relative">
+              <MicOff className="size-5 mb-1 opacity-50" />
+              <Lock className="size-3 absolute -top-1 -right-2 text-rose-500" />
+            </div>
+            <span className="text-[10px] font-medium">Locked</span>
+          </div>
+          <button
+            onClick={handleRequestUnmute}
+            className={lex flex-col items-center justify-center p-3 px-5 rounded-xl transition border }
+            title="Request to Speak (Raise Hand)"
+          >
+            {requesting ? (
+              <Hand className="size-5 mb-1 animate-bounce" />
+            ) : (
+              <Hand className="size-5 mb-1" />
+            )}
+            <span className="text-[10px] font-medium">{requesting ? 'Requested' : 'Raise Hand'}</span>
+          </button>
+        </>
       )}
 
       {/* Video Button */}
