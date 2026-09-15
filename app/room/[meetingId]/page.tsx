@@ -550,8 +550,6 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
         }
 
         // Fetch LiveKit Token
-        const guestName = localStorage.getItem('guestName') || ''
-        const guestIdentity = localStorage.getItem('guestIdentity') || ''
         const res = await fetch('/api/livekit/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
