@@ -86,6 +86,59 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: `Removed ${targetIdentity} and blocked from rejoining` })
     }
 
+    if (action === 'transfer-host' && targetIdentity) {
+      if (!isHost) {
+        return NextResponse.json({ error: 'Only the current host can transfer the host role' }, { status: 403 })
+      }
+      
+      const targetParticipant = await roomService.getParticipant(meetingId, targetIdentity)
+      if (!targetParticipant) {
+        return NextResponse.json({ error: 'Target participant not found' }, { status: 404 })
+      }
+
+      // Update MongoDB
+      if (!meeting.moderators.includes(meeting.hostEmail)) {
+        meeting.moderators.push(meeting.hostEmail) // Add current host to moderators
+      }
+      meeting.hostEmail = targetIdentity.toLowerCase() // Set new host
+      await meeting.save()
+
+      // We should ideally update LiveKit metadata for both, but LiveKit tokens encode isHost. 
+      // Next time they join, token will be correct. For active session, we update metadata.
+      await roomService.updateParticipant(meetingId, targetIdentity, JSON.stringify({
+        isHost: true,
+        isModerator: true,
+        email: targetIdentity
+      }))
+      
+      return NextResponse.json({ success: true, message: `Host role transferred to ${targetIdentity}` })
+    }
+
+    if (action === 'restrict-unmute' && targetIdentity) {
+      await roomService.updateParticipant(meetingId, targetIdentity, undefined, {
+        canPublish: false,
+        canPublishData: true,
+        canSubscribe: true,
+      })
+      // Mute them currently as well
+      const p = await roomService.getParticipant(meetingId, targetIdentity)
+      for (const t of p.tracks) {
+        if (t.type === 0) {
+          await roomService.mutePublishedTrack(meetingId, targetIdentity, t.sid, true)
+        }
+      }
+      return NextResponse.json({ success: true, message: `Restricted ${targetIdentity} from unmuting` })
+    }
+
+    if (action === 'allow-unmute' && targetIdentity) {
+      await roomService.updateParticipant(meetingId, targetIdentity, undefined, {
+        canPublish: true,
+        canPublishData: true,
+        canSubscribe: true,
+      })
+      return NextResponse.json({ success: true, message: `Allowed ${targetIdentity} to unmute` })
+    }
+
     return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })
   } catch (error: any) {
     console.error('Admin action error:', error)

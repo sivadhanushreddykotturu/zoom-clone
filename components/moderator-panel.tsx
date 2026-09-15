@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useLocalParticipant } from '@livekit/components-react'
 import { Shield, VolumeX, Mic, MicOff, UserPlus, UserX, Check, AlertCircle, X, Sparkles } from 'lucide-react'
 
 interface ModeratorPanelProps {
@@ -18,6 +19,7 @@ export function ModeratorPanel({
   participants,
   onClose
 }: ModeratorPanelProps) {
+  const { localParticipant } = useLocalParticipant()
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [newModEmail, setNewModEmail] = useState('')
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -53,6 +55,25 @@ export function ModeratorPanel({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to remove participant')
       setStatusMsg({ type: 'success', text: `Removed ${identity} from meeting.` })
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: err.message })
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  const handleAction = async (actionName: string, identity: string) => {
+    setLoadingAction(`${actionName}-${identity}`)
+    setStatusMsg(null)
+    try {
+      const res = await fetch('/api/livekit/admin-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meetingId, action: actionName, targetIdentity: identity })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Failed to perform ${actionName}`)
+      setStatusMsg({ type: 'success', text: data.message || `Action ${actionName} successful.` })
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: err.message })
     } finally {
@@ -185,16 +206,46 @@ export function ModeratorPanel({
                     </span>
                   )}
 
-                  {isHost && (
+                  <div className="flex gap-1 ml-2">
                     <button
-                      onClick={() => handleKick(p.identity)}
-                      disabled={loadingAction === `kick-${p.identity}`}
+                      onClick={() => handleAction('restrict-unmute', p.identity)}
+                      disabled={loadingAction === `restrict-unmute-${p.identity}`}
                       className="rounded-lg p-1.5 text-zinc-400 hover:bg-rose-500/20 hover:text-rose-400 transition"
-                      title="Kick participant"
+                      title="Lock Mic (Prevent Unmuting)"
                     >
-                      <UserX className="size-3.5" />
+                      <VolumeX className="size-3.5" />
                     </button>
-                  )}
+                    <button
+                      onClick={() => handleAction('allow-unmute', p.identity)}
+                      disabled={loadingAction === `allow-unmute-${p.identity}`}
+                      className="rounded-lg p-1.5 text-zinc-400 hover:bg-emerald-500/20 hover:text-emerald-400 transition"
+                      title="Unlock Mic (Allow Unmuting)"
+                    >
+                      <Mic className="size-3.5" />
+                    </button>
+
+                    {isHost && p.identity !== localParticipant.identity && (
+                      <button
+                        onClick={() => handleAction('transfer-host', p.identity)}
+                        disabled={loadingAction === `transfer-host-${p.identity}`}
+                        className="rounded-lg p-1.5 text-zinc-400 hover:bg-indigo-500/20 hover:text-indigo-400 transition"
+                        title="Make Host"
+                      >
+                        <Shield className="size-3.5" />
+                      </button>
+                    )}
+
+                    {(isHost || isModerator) && p.identity !== localParticipant.identity && (
+                      <button
+                        onClick={() => handleKick(p.identity)}
+                        disabled={loadingAction === `kick-${p.identity}`}
+                        className="rounded-lg p-1.5 text-zinc-400 hover:bg-rose-500/20 hover:text-rose-400 transition"
+                        title="Kick participant"
+                      >
+                        <UserX className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
