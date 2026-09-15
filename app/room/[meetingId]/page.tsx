@@ -476,7 +476,9 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
     const checkLobby = async () => {
       try {
-        const res = await fetch(`/api/meetings/${meetingId}/lobby`)
+        const guestName = localStorage.getItem('guestName') || ''
+        const guestIdentity = localStorage.getItem('guestIdentity') || ''
+        const res = await fetch(`/api/meetings/${meetingId}/lobby?guestName=${encodeURIComponent(guestName)}&guestIdentity=${encodeURIComponent(guestIdentity)}`)
         if (res.ok) {
           const data = await res.json()
           if (data.status === 'approved') {
@@ -492,14 +494,17 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
       }
     }
 
-    const interval = setInterval(checkLobby, 4000)
+    checkLobby()
+    const interval = setInterval(checkLobby, 3000)
     return () => clearInterval(interval)
   }, [lobbyStatus, meetingId])
 
   // 2. Host Pending Lobby List Polling Flow
   const fetchLobbyList = useCallback(async () => {
     try {
-      const res = await fetch(`/api/meetings/${meetingId}/lobby`)
+      const guestName = localStorage.getItem('guestName') || ''
+      const guestIdentity = localStorage.getItem('guestIdentity') || ''
+      const res = await fetch(`/api/meetings/${meetingId}/lobby?guestName=${encodeURIComponent(guestName)}&guestIdentity=${encodeURIComponent(guestIdentity)}`)
       if (res.ok) {
         const data = await res.json()
         if (data.isModerator && data.pending) {
@@ -528,8 +533,15 @@ export default function RoomPage({ params }: { params: Promise<{ meetingId: stri
 
     async function fetchToken() {
       try {
+        const guestName = localStorage.getItem('guestName') || ''
+        const guestIdentity = localStorage.getItem('guestIdentity') || ''
+
         // Try lobby registration first
-        const lobbyCheck = await fetch(`/api/meetings/${meetingId}/lobby`, { method: 'POST' })
+        const lobbyCheck = await fetch(`/api/meetings/${meetingId}/lobby`, { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ guestName, guestIdentity })
+        })
         const lobbyData = await lobbyCheck.json()
         if (lobbyData.status === 'pending') {
           setLobbyStatus('pending')
