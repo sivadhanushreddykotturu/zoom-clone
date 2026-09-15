@@ -62,11 +62,11 @@ export async function POST(req: Request) {
                 isModerator: true,
                 email: newHost.identity
               }))
-              console.log([Webhook] Host left. Transferred host to )
+              console.log(`[Webhook] Host left. Transferred host to ${newHost.identity}`)
             } else {
               // No co-hosts available. End the meeting.
               await roomService.deleteRoom(roomName)
-              console.log([Webhook] Host left and no co-hosts available. Ended meeting )
+              console.log(`[Webhook] Host left and no co-hosts available. Ended meeting ${roomName}`)
             }
           } catch (err) {
             console.error('[Webhook] Error handling host departure:', err)
