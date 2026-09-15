@@ -18,7 +18,7 @@ export function CustomControlBar({ isHost, isModerator, meetingId }: { isHost: b
   useEffect(() => {
     if (!isHost && !isModerator) {
       if (canPublish && !prevCanPublish) {
-        setToastMessage("Host gave you permission! You can now mute/unmute.")
+        setToastMessage("Host gave you permission! You can now speak.")
         setTimeout(() => setToastMessage(null), 5000)
       } else if (!canPublish && prevCanPublish) {
         setToastMessage("Your microphone has been locked by the host.")
@@ -27,6 +27,29 @@ export function CustomControlBar({ isHost, isModerator, meetingId }: { isHost: b
     }
     setPrevCanPublish(canPublish)
   }, [canPublish, prevCanPublish, isHost, isModerator])
+
+  // Listen to mute events to auto-revoke permission
+  useEffect(() => {
+    if (!localParticipant) return
+    
+    const handleTrackMuted = (pub: any) => {
+      if (pub.source === Track.Source.Microphone) {
+        // If a participant (not host/mod) mutes themselves, revoke their permission so they must raise hand again
+        if (!isHost && !isModerator && canPublish) {
+          fetch('/api/livekit/admin-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meetingId, action: 'restrict-unmute', targetIdentity: localParticipant.identity })
+          })
+        }
+      }
+    }
+
+    localParticipant.on('trackMuted', handleTrackMuted)
+    return () => {
+      localParticipant.off('trackMuted', handleTrackMuted)
+    }
+  }, [localParticipant, isHost, isModerator, canPublish, meetingId])
 
   const handleRequestUnmute = async () => {
     if (canPublish) return
